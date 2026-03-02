@@ -668,4 +668,99 @@ If `CLAUDE_API_KEY` is not set, runs still work — they use the deterministic f
 
 ---
 
-*Next change will be #008.*
+---
+
+## #008 — 2026-03-02 — ServiceNow Integration (Run Trigger + WritebackSkill)
+
+**What happened:**
+Added full ServiceNow integration: config persistence, external run trigger endpoint, and a conditional WritebackSkill that patches incident work_notes after resolution synthesis.
+
+**Files created:**
+- `backend/services/servicenow.py` — `ServiceNowProvider` class with `update_work_notes()` (PATCH to ServiceNow REST Table API) and `format_work_notes()` helper that produces a stable, readable work notes string with summary, steps, sources, confidence, and run ID.
+
+**Files modified:**
+
+- `backend/models.py` — Added 3 models:
+  - `ServiceNowConfig` — tenant_id, instance_url, username, password, updated_at
+  - `PutServiceNowConfigRequest` — instance_url, username, password
+  - `ServiceNowRunRequest` — tenant_id, tenant_secret, sys_id, number, short_description, description, classification, metadata, access_token (optional)
+
+- `backend/store/interface.py` — Added `ServiceNowConfigStore` ABC with `get_by_tenant()` and `upsert()` methods.
+
+- `backend/store/memory.py` — Added `InMemoryServiceNowConfigStore` implementing the same merge-on-upsert pattern as `InMemoryGoogleDriveConfigStore`.
+
+- `backend/store/__init__.py` — Re-exports `ServiceNowConfigStore` and `InMemoryServiceNowConfigStore`.
+
+- `backend/main.py` — Added `app.state.snow_config_store = InMemoryServiceNowConfigStore()`.
+
+- `backend/routers/admin.py` — Added 2 endpoints:
+  - `GET /api/admin/{tenant_id}/servicenow` — returns ServiceNow config or null
+  - `PUT /api/admin/{tenant_id}/servicenow` — upserts instance_url, username, password
+
+- `backend/routers/runs.py` — Added `POST /api/runs/from/servicenow` endpoint:
+  - Validates tenant exists, is active, and shared_secret matches `body.tenant_secret`
+  - Constructs `WorkObject` with `source_system="servicenow"`, `record_type="incident"`, metadata containing sys_id and number
+  - Passes `snow_config_store` and `snow_provider` to orchestrator
+  - Updated existing `create_run` endpoint to also pass `snow_config_store` and `snow_provider`
+  - Updated WebSocket terminal check to detect both `RecordOutcome` and `Writeback` skill completions
+
+- `backend/services/orchestrator.py` — Added WritebackSkill (Skill E):
+  - New parameters: `snow_config_store: Any = None`, `snow_provider: Any = None`
+  - Pre-flight check before RecordOutcome: if `source_system == "servicenow"` and ServiceNow config exists, sets `will_writeback = True`
+  - RecordOutcome conditionally defers `status="completed"` when writeback follows (stores result without status change)
+  - Skill E runs after RecordOutcome: formats work notes via `format_work_notes()`, PATCHes incident via `snow_provider.update_work_notes()`, emits `tool_call`/`tool_result`/`complete` events
+  - Catches `ServiceNowError` gracefully — emits error event but does NOT fail the run (run still completes)
+  - Sets `status="completed"` BEFORE emitting the terminal event to avoid WebSocket race condition
+
+- `src/app/services/api.ts` — Added `ServiceNowConfigResponse` interface, `getSnowConfig()`, and `putSnowConfig()` functions.
+
+- `src/app/pages/SetupWizardPage.tsx`:
+  - Replaced mock `handleTestServiceNow` (setTimeout) with real `api.putSnowConfig()` call that persists to backend
+  - Loads existing ServiceNow config on tenant edit (added `api.getSnowConfig(id)` to the parallel load)
+  - Persists ServiceNow config on "Next" from Step 2 (`currentStep === 1`)
+
+- `src/app/pages/RunsPage.tsx` — Updated `SKILL_ORDER` to include `'Writeback'` so it appears in the skill timeline.
+
+**ServiceNow run trigger flow:**
+```
+POST /api/runs/from/servicenow
+{
+  "tenant_id": "t_abc123",
+  "tenant_secret": "the-shared-secret",
+  "sys_id": "abc123...",
+  "number": "INC0012345",
+  "short_description": "VPN not connecting",
+  "description": "User reports VPN fails after update...",
+  "classification": [{"name": "Category", "value": "Network"}]
+}
+```
+1. Validates tenant exists, is active, shared_secret matches
+2. Constructs WorkObject with `source_system="servicenow"`
+3. Kicks off orchestrator in background
+4. Returns `{"run_id": "run_xxx"}`
+
+**WritebackSkill flow (Skill E — conditional):**
+1. Only runs when `work_object.source_system == "servicenow"` AND ServiceNow config exists for the tenant
+2. Formats work notes: `[AI Resolution Recommendation]\n\nSummary:\n...\nRecommended Steps:\n  1. ...\nSources:\n  - title: url\nConfidence: 0.xx\nRun ID: run_xxx`
+3. PATCHes `/api/now/table/incident/{sys_id}` with `{"work_notes": formatted_text}` using Basic Auth
+4. On success: emits `tool_result` + `complete` events
+5. On failure: emits `error` event but run still completes (result is preserved)
+
+**WebSocket terminal detection:**
+Previously checked only `RecordOutcome` complete/error. Now checks both `RecordOutcome` and `Writeback` — when the event arrives, it verifies run status is terminal before sending `stream_end`. For non-ServiceNow runs, RecordOutcome sets status before its complete event. For ServiceNow runs, RecordOutcome defers status → WS stays open → Writeback sets status before its terminal event → WS closes.
+
+**Key architecture decisions:**
+- **ServiceNow credentials stored server-side** — instance_url, username, password are persisted in `InMemoryServiceNowConfigStore` (future: Postgres). The access_token for Google Drive remains client-side/per-request, but ServiceNow creds are stored because writeback happens asynchronously after the run starts.
+- **Writeback does not fail the run** — The resolution result is already recorded in RecordOutcome. If ServiceNow PATCH fails (network, auth, permissions), the error is logged as an event but the run still shows as completed with its result.
+- **Deferred status pattern** — RecordOutcome stores the result without changing status when writeback follows. This prevents the WebSocket from closing prematurely while Writeback is still in progress.
+- **Shared secret auth for external trigger** — The `/runs/from/servicenow` endpoint uses `tenant_secret` (generated during activation) rather than OAuth. This is suitable for ServiceNow webhook/scripted REST integrations.
+- **format_work_notes is pure** — The formatter is a standalone function, easy to test and modify without touching the provider class.
+
+**What GPT should know for next steps:**
+- ServiceNow integration is complete end-to-end: config → trigger → orchestrate → writeback.
+- The ServiceNow "Test Connection" button in the wizard currently just persists config — it doesn't actually test the connection to ServiceNow. A dedicated test endpoint could be added in a future sprint.
+- WritebackSkill only fires for `source_system == "servicenow"` runs. UI-created runs (`source_system == "ui"`) skip it entirely.
+- The `ServiceNowRunRequest.access_token` field is optional — it's used for Google Drive document search during the run. If omitted, the run still works but document retrieval may fail.
+- `SKILL_ORDER` in RunsPage now includes Writeback, so it always shows in the timeline (as "pending" for non-ServiceNow runs). A future improvement could hide it dynamically based on source_system.
+
+*Next change will be #009.*
