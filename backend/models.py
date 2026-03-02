@@ -69,3 +69,28 @@ class ActivateResponse(BaseModel):
     tenant_id: str
     shared_secret: str
     instructions_stub: str
+
+
+# --- Google Drive request/response models ---
+
+
+class TestDriveFolderRequest(BaseModel):
+    access_token: str
+    folder_id: str
+
+
+class ScaffoldApplyRequest(BaseModel):
+    access_token: str
+    root_folder_id: str
+    schema_tree: list[ClassificationNodeModel]
+
+
+class TestDriveFolderResponse(BaseModel):
+    folder_id: str
+    folder_name: str
+
+
+class ScaffoldApplyResponse(BaseModel):
+    schema_folder_id: str
+    progress_log: list[str]
+    created_count: int

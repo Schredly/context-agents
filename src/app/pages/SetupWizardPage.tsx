@@ -6,7 +6,6 @@ import { SetupStepper } from '../components/SetupStepper';
 import { type ClassificationNode } from '../data/mockData';
 import { useGoogleAuth } from '../auth/GoogleAuthContext';
 import { useTenants } from '../context/TenantContext';
-import { testDriveFolder, scaffoldDrive, uploadSchemaFile, type ScaffoldProgress } from '../services/google-drive';
 import * as api from '../services/api';
 
 const steps = [
@@ -171,7 +170,8 @@ export function SetupWizardPage() {
 
   // Scaffold state
   const [scaffoldStatus, setScaffoldStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
-  const [scaffoldProgress, setScaffoldProgress] = useState<ScaffoldProgress | null>(null);
+  const [scaffoldLog, setScaffoldLog] = useState<string[]>([]);
+  const [scaffoldCreatedCount, setScaffoldCreatedCount] = useState(0);
   const [scaffoldError, setScaffoldError] = useState('');
 
   // Load existing tenant for editing
@@ -244,17 +244,17 @@ export function SetupWizardPage() {
       setDriveError('Please provide a folder ID.');
       return;
     }
+    if (!tenantId) {
+      setDriveStatus('error');
+      setDriveError('Please create a tenant first (Step 1).');
+      return;
+    }
     setDriveStatus('testing');
     setDriveError('');
     try {
-      const name = await testDriveFolder(accessToken, folderId.trim());
-      setFolderName(name);
+      const result = await api.testDriveFolder(tenantId, accessToken, folderId.trim());
+      setFolderName(result.folder_name);
       setDriveStatus('success');
-
-      // Persist drive config to backend
-      if (tenantId) {
-        await api.putDriveConfig(tenantId, folderId.trim(), name);
-      }
     } catch (err) {
       setDriveStatus('error');
       setDriveError(err instanceof Error ? err.message : 'Connection failed');
@@ -262,36 +262,22 @@ export function SetupWizardPage() {
   };
 
   const handleApplyScaffold = async () => {
-    if (!accessToken || !folderId.trim()) return;
+    if (!accessToken || !folderId.trim() || !tenantId) return;
     setScaffoldStatus('running');
-    setScaffoldProgress(null);
+    setScaffoldLog([]);
+    setScaffoldCreatedCount(0);
     setScaffoldError('');
     try {
-      const tenantIdForScaffold = tenantId || tenantName || 'default';
-      const { schemaFolderId } = await scaffoldDrive(
+      const result = await api.scaffoldApply(
+        tenantId,
         accessToken,
         folderId.trim(),
-        tenantIdForScaffold,
         classificationNodes,
-        (progress) => setScaffoldProgress(progress),
       );
-
-      // Upload classification schema
-      setScaffoldProgress((prev) => prev ? { ...prev, message: 'Uploading classification_schema.json...' } : prev);
-      await uploadSchemaFile(accessToken, schemaFolderId, classificationNodes);
-
+      setScaffoldLog(result.progress_log);
+      setScaffoldCreatedCount(result.created_count);
       setScaffoldStatus('done');
       toast.success('Drive scaffold applied successfully');
-
-      // Persist scaffold result to backend
-      if (tenantId) {
-        await api.postScaffoldResult(tenantId, {
-          scaffolded: true,
-          scaffolded_at: new Date().toISOString(),
-          root_folder_id: folderId.trim(),
-          folder_name: folderName || undefined,
-        });
-      }
     } catch (err) {
       setScaffoldStatus('error');
       setScaffoldError(err instanceof Error ? err.message : 'Scaffold failed');
@@ -626,27 +612,33 @@ export function SetupWizardPage() {
                   {scaffoldStatus === 'running' ? 'Applying...' : 'Apply Scaffold'}
                 </button>
 
-                {/* Progress */}
-                {scaffoldStatus === 'running' && scaffoldProgress && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{scaffoldProgress.message}</span>
-                      <span>{scaffoldProgress.current}/{scaffoldProgress.total}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all"
-                        style={{ width: `${(scaffoldProgress.current / scaffoldProgress.total) * 100}%` }}
-                      />
-                    </div>
+                {/* Running spinner */}
+                {scaffoldStatus === 'running' && (
+                  <div className="flex items-center gap-2 text-sm text-blue-600">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creating folder structure in Google Drive...
                   </div>
                 )}
 
                 {/* Success */}
                 {scaffoldStatus === 'done' && (
-                  <div className="flex items-center gap-2 text-sm text-green-600">
-                    <CheckCircle className="w-4 h-4" />
-                    Scaffold applied successfully. Folders are ready in Google Drive.
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-green-600">
+                      <CheckCircle className="w-4 h-4" />
+                      Scaffold applied — {scaffoldCreatedCount} folder{scaffoldCreatedCount !== 1 ? 's' : ''} created.
+                    </div>
+                    {scaffoldLog.length > 0 && (
+                      <details className="text-xs border border-border rounded p-2">
+                        <summary className="cursor-pointer text-muted-foreground">Show details ({scaffoldLog.length} entries)</summary>
+                        <ul className="mt-1 space-y-0.5 font-mono">
+                          {scaffoldLog.map((entry, i) => (
+                            <li key={i} className={entry.startsWith('Created') ? 'text-green-700' : 'text-gray-400'}>
+                              {entry}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
                   </div>
                 )}
 

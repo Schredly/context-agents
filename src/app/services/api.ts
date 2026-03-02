@@ -36,6 +36,17 @@ export interface ActivateResponse {
   instructions_stub: string;
 }
 
+export interface TestDriveFolderResponse {
+  folder_id: string;
+  folder_name: string;
+}
+
+export interface ScaffoldApplyResponse {
+  schema_folder_id: string;
+  progress_log: string[];
+  created_count: number;
+}
+
 // --- Helpers ---
 
 class ApiError extends Error {
@@ -145,5 +156,34 @@ export function postScaffoldResult(
   return request(`/admin/${tenantId}/scaffold-result`, {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+// --- Google Drive (server-side) ---
+
+export function testDriveFolder(
+  tenantId: string,
+  accessToken: string,
+  folderId: string,
+): Promise<TestDriveFolderResponse> {
+  return request(`/admin/${tenantId}/google-drive/test`, {
+    method: 'POST',
+    body: JSON.stringify({ access_token: accessToken, folder_id: folderId }),
+  });
+}
+
+export function scaffoldApply(
+  tenantId: string,
+  accessToken: string,
+  rootFolderId: string,
+  schemaTree: ClassificationNodeResponse[],
+): Promise<ScaffoldApplyResponse> {
+  return request(`/admin/${tenantId}/scaffold-apply`, {
+    method: 'POST',
+    body: JSON.stringify({
+      access_token: accessToken,
+      root_folder_id: rootFolderId,
+      schema_tree: schemaTree,
+    }),
   });
 }
