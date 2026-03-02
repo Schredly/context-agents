@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Coroutine
 
 from models import AgentEvent, AgentRun, WorkObject
+from services.claude_client import ClaudeClientError, synthesize_resolution
 from services.google_drive import GoogleDriveError, GoogleDriveProvider
 from store.interface import EventStore, RunStore
 
@@ -150,30 +151,83 @@ async def run_orchestrator(
             "Synthesizing resolution from available sources...",
         )
 
-        confidence = 0.55 if doc_count > 0 else 0.2
-        summary_text = (
-            f"Based on analysis of '{work_object.title}', "
-            f"{doc_count} relevant document(s) were found in the knowledge base. "
-        )
-        if doc_count > 0:
-            summary_text += (
-                "The documents provide context that can help resolve this issue. "
-                "Review the linked sources for detailed guidance."
-            )
-        else:
-            summary_text += (
-                "No matching documents were found. Consider adding relevant "
-                "documentation to the knowledge base for future reference."
+        classification_pairs = [
+            {"name": p.name, "value": p.value} for p in work_object.classification
+        ]
+        used_fallback = False
+
+        try:
+            await emit(
+                "SynthesizeResolution",
+                "tool_call",
+                "Calling Claude synthesis...",
+                metadata={"doc_count": doc_count},
             )
 
-        steps = _build_steps(work_object, sources)
+            claude_result = await synthesize_resolution(
+                title=work_object.title,
+                description=work_object.description,
+                classification=classification_pairs,
+                sources=sources,
+            )
+
+            summary_text = claude_result["summary"]
+            steps = claude_result["recommended_steps"]
+            result_sources = claude_result["sources"]
+            confidence = claude_result["confidence"]
+
+            meta = claude_result.get("_meta", {})
+            await emit(
+                "SynthesizeResolution",
+                "tool_result",
+                f"Claude synthesis complete (confidence: {confidence:.0%}).",
+                confidence=confidence,
+                metadata={
+                    "model": meta.get("model"),
+                    "latency_ms": meta.get("latency_ms"),
+                    "input_tokens": meta.get("input_tokens"),
+                    "output_tokens": meta.get("output_tokens"),
+                    "doc_count": doc_count,
+                },
+            )
+
+        except ClaudeClientError as exc:
+            used_fallback = True
+            await emit(
+                "SynthesizeResolution",
+                "error",
+                f"Claude unavailable, using fallback: {exc}",
+            )
+
+            # Deterministic fallback
+            confidence = 0.55 if doc_count > 0 else 0.2
+            summary_text = (
+                f"Based on analysis of '{work_object.title}', "
+                f"{doc_count} relevant document(s) were found in the knowledge base. "
+            )
+            if doc_count > 0:
+                summary_text += (
+                    "The documents provide context that can help resolve this issue. "
+                    "Review the linked sources for detailed guidance."
+                )
+            else:
+                summary_text += (
+                    "No matching documents were found. Consider adding relevant "
+                    "documentation to the knowledge base for future reference."
+                )
+            steps = _build_steps(work_object, sources)
+            result_sources = [
+                {"title": s["name"], "url": s.get("webViewLink", "")}
+                for s in sources
+            ]
 
         await emit(
             "SynthesizeResolution",
             "complete",
-            f"Synthesized resolution with {len(steps)} steps (confidence: {confidence:.0%}).",
+            f"Synthesized resolution with {len(steps)} steps (confidence: {confidence:.0%})."
+            + (" [fallback]" if used_fallback else ""),
             confidence=confidence,
-            metadata={"step_count": len(steps)},
+            metadata={"step_count": len(steps), "fallback": used_fallback},
         )
 
         await asyncio.sleep(0.3)
@@ -184,9 +238,7 @@ async def run_orchestrator(
         result = {
             "summary": summary_text,
             "steps": steps,
-            "sources": [
-                {"title": s["name"], "url": s.get("webViewLink", "")} for s in sources
-            ],
+            "sources": result_sources,
             "confidence": confidence,
         }
 
