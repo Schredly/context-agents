@@ -274,4 +274,87 @@ npm run dev
 
 ---
 
-*Next change will be #004.*
+## #004 — 2026-03-02 — Shared TenantContext (Single Source of Truth)
+
+**What happened:**
+Replaced the stale in-memory `mockTenants` / `getCurrentTenant` / `setCurrentTenant` in mockData.ts with a shared React context backed by the backend API. TopBar, TenantsPage, and SetupWizardPage now share tenant state via `useTenants()`, so creating, deleting, or activating a tenant is immediately reflected across all components without a page reload.
+
+**New files created:**
+
+- `src/app/context/TenantContext.tsx` — React context + provider following the GoogleAuthContext pattern:
+  - `TenantContextValue` interface: `tenants: TenantResponse[]`, `loading: boolean`, `error: string | null`, `refreshTenants(): Promise<void>`, `currentTenantId: string | null`, `setCurrentTenantId(id: string | null): void`, `currentTenant: TenantResponse | null`
+  - `TenantProvider` component: fetches `api.getTenants()` on mount, stores tenants list + current selection in state. `currentTenant` derived via `tenants.find()`. Auto-selects first tenant when nothing is selected. `refreshTenants()` re-fetches and preserves selection if still valid, otherwise resets to first.
+  - `useTenants()` hook with `FALLBACK` constant (returns safe defaults if provider is missing, matching GoogleAuthContext pattern)
+  - In-memory only — no localStorage
+
+**Files modified:**
+
+- `src/app/App.tsx` — Wrapped `<RouterProvider>` with `<TenantProvider>` inside `<GoogleAuthProvider>`:
+  ```
+  <GoogleAuthProvider>
+    <TenantProvider>
+      <RouterProvider router={router} />
+    </TenantProvider>
+  </GoogleAuthProvider>
+  ```
+
+- `src/app/components/TopBar.tsx` — Complete rewrite:
+  - Replaced `import { mockTenants, getCurrentTenant, setCurrentTenant }` with `import { useTenants }`
+  - Destructures `{ tenants, currentTenant, currentTenantId, setCurrentTenantId }` from context
+  - `handleTenantSelect`: calls `setCurrentTenantId(id)` + closes dropdown — no more `window.location.reload()`
+  - Empty state: disabled button showing "No tenants" when `tenants.length === 0`
+  - Status badge: checks `=== 'active'` (lowercase from backend), capitalizes for display via `displayStatus()`
+
+- `src/app/pages/TenantsPage.tsx` — Simplified:
+  - Removed local `useState<TenantResponse[]>`, `useState(true)` for loading, `fetchTenants` function, and `useEffect`
+  - Replaced with `const { tenants, loading, refreshTenants } = useTenants()`
+  - `handleDelete` calls `refreshTenants()` after `deleteTenant(id)` — this updates both the table and TopBar
+  - Removed `getTenants` import from `../services/api` (context handles fetching)
+
+- `src/app/pages/SetupWizardPage.tsx` — Added context integration at three points:
+  - Import `useTenants` from context, destructure `{ setCurrentTenantId, refreshTenants }`
+  - After `api.createTenant()` in handleNext step 0: `await refreshTenants()` + `setCurrentTenantId(tenant.id)` — new tenant appears in TopBar immediately
+  - In edit-mode `useEffect` (when `id` URL param exists): `setCurrentTenantId(tenant.id)` — TopBar syncs to the tenant being edited
+  - After `handleActivate` succeeds: `await refreshTenants()` — TopBar shows updated "Active" status
+
+- `src/app/data/mockData.ts` — Cleaned up:
+  - Removed: `Tenant` interface, `mockTenants` array (3 hardcoded tenants), `currentTenantId` variable, `getCurrentTenant()` function, `setCurrentTenant()` function
+  - Kept: `ClassificationNode` interface, `Run`/`Skill`/`RunResult` interfaces, `mockRuns` array
+
+**Updated project structure:**
+```
+src/app/
+├── context/
+│   └── TenantContext.tsx        # NEW — Shared tenant state backed by backend API
+├── auth/
+│   └── GoogleAuthContext.tsx    # (unchanged)
+├── services/
+│   ├── api.ts                  # (unchanged)
+│   └── google-drive.ts         # (unchanged)
+├── data/
+│   └── mockData.ts             # Reduced — only ClassificationNode, Run types, mockRuns
+├── components/
+│   └── TopBar.tsx              # Rewritten — uses useTenants() context
+├── pages/
+│   ├── TenantsPage.tsx         # Simplified — uses useTenants() context
+│   ├── SetupWizardPage.tsx     # Added context calls for create/edit/activate
+│   └── RunsPage.tsx            # (unchanged — still uses mockRuns)
+└── App.tsx                     # Added TenantProvider wrapper
+```
+
+**Key architecture decisions:**
+- **Context pattern matches GoogleAuthContext** — same `createContext` + `useContext` + FALLBACK approach for consistency
+- **Backend is the single source of truth** — context calls `getTenants()` API, no local mock data
+- **No localStorage** — tenant selection resets on page refresh (auto-selects first tenant)
+- **`refreshTenants()` preserves selection** — after re-fetch, keeps `currentTenantId` if the tenant still exists, otherwise falls back to first
+
+**What GPT should know for next steps:**
+- TopBar is now fully wired to backend data — the `mockTenants` array no longer exists
+- All tenant CRUD operations (create, delete, activate) now trigger `refreshTenants()` which updates every component using `useTenants()`
+- `mockData.ts` only contains `ClassificationNode` (used by SetupWizardPage), `Run`/`Skill`/`RunResult` types, and `mockRuns` (used by RunsPage)
+- The `Tenant` interface from mockData.ts is gone — use `TenantResponse` from `services/api.ts` instead
+- RunsPage is the last page still using mock data
+
+---
+
+*Next change will be #005.*
