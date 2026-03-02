@@ -161,6 +161,47 @@ class GoogleDriveProvider:
             "created_count": created_count,
         }
 
+    async def search_documents(
+        self,
+        access_token: str,
+        folder_id: str,
+        tokens: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, str]]:
+        """Search for files in a folder whose name matches any token."""
+        if not tokens:
+            return []
+        name_clauses = " or ".join(f"name contains '{t}'" for t in tokens[:8])
+        q = (
+            f"'{folder_id}' in parents and ({name_clauses}) "
+            f"and mimeType!='{FOLDER_MIME}' and trashed=false"
+        )
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                f"{DRIVE_API}/files",
+                params={
+                    "q": q,
+                    "fields": "files(id,name,webViewLink)",
+                    "pageSize": str(limit),
+                    "supportsAllDrives": "true",
+                    "includeItemsFromAllDrives": "true",
+                },
+                headers=_auth(access_token),
+            )
+        if not res.is_success:
+            body = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
+            msg = body.get("error", {}).get("message", f"Search failed ({res.status_code})")
+            raise GoogleDriveError(res.status_code, msg)
+        files = res.json().get("files", [])
+        return [
+            {
+                "name": f.get("name", ""),
+                "id": f.get("id", ""),
+                "webViewLink": f.get("webViewLink", ""),
+            }
+            for f in files
+        ]
+
     async def upload_schema(
         self,
         access_token: str,

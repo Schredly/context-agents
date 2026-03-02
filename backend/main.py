@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import admin_router, tenants_router
+from routers import admin_router, runs_router, tenants_router
 from store import (
     InMemoryClassificationSchemaStore,
+    InMemoryEventStore,
     InMemoryGoogleDriveConfigStore,
+    InMemoryRunStore,
     InMemoryTenantStore,
 )
 
@@ -22,6 +24,9 @@ app.add_middleware(
 app.state.tenant_store = InMemoryTenantStore()
 app.state.schema_store = InMemoryClassificationSchemaStore()
 app.state.drive_config_store = InMemoryGoogleDriveConfigStore()
+app.state.run_store = InMemoryRunStore()
+app.state.event_store = InMemoryEventStore()
 
 app.include_router(tenants_router)
 app.include_router(admin_router)
+app.include_router(runs_router)

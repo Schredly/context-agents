@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from models import (
+    AgentEvent,
+    AgentRun,
     ClassificationNodeModel,
     ClassificationSchema,
     GoogleDriveConfig,
@@ -12,7 +14,9 @@ from models import (
 )
 from store.interface import (
     ClassificationSchemaStore,
+    EventStore,
     GoogleDriveConfigStore,
+    RunStore,
     TenantStore,
 )
 
@@ -91,3 +95,40 @@ class InMemoryGoogleDriveConfigStore(GoogleDriveConfigStore):
             config = GoogleDriveConfig(tenant_id=tenant_id, **kwargs)
         self._configs[tenant_id] = config
         return config
+
+
+class InMemoryRunStore(RunStore):
+    def __init__(self) -> None:
+        self._runs: dict[str, AgentRun] = {}
+
+    async def create_run(self, run: AgentRun) -> AgentRun:
+        self._runs[run.run_id] = run
+        return run
+
+    async def get_run(self, run_id: str) -> Optional[AgentRun]:
+        return self._runs.get(run_id)
+
+    async def list_runs_for_tenant(self, tenant_id: str) -> list[AgentRun]:
+        return [r for r in self._runs.values() if r.tenant_id == tenant_id]
+
+    async def update_run(self, run_id: str, **kwargs: Any) -> Optional[AgentRun]:
+        run = self._runs.get(run_id)
+        if run is None:
+            return None
+        data = run.model_dump()
+        data.update({k: v for k, v in kwargs.items() if v is not None})
+        updated = AgentRun(**data)
+        self._runs[run_id] = updated
+        return updated
+
+
+class InMemoryEventStore(EventStore):
+    def __init__(self) -> None:
+        self._events: dict[str, list[AgentEvent]] = {}
+
+    async def append_event(self, event: AgentEvent) -> AgentEvent:
+        self._events.setdefault(event.run_id, []).append(event)
+        return event
+
+    async def list_events_for_run(self, run_id: str) -> list[AgentEvent]:
+        return list(self._events.get(run_id, []))

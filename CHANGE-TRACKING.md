@@ -444,4 +444,135 @@ src/app/
 
 ---
 
-*Next change will be #006.*
+## #006 — 2026-03-02 — Execution Plane MVP (Runs + Events + Skill Chain)
+
+**What happened:**
+Built a minimal execution plane: users can create agent runs from the UI, the backend executes a 4-skill chain (ValidateInput → RetrieveDocs → SynthesizeResolution → RecordOutcome), events stream live to the browser via WebSocket, and the RunsPage now displays real backend data instead of mock data. Google Drive document search is wired in via the existing `GoogleDriveProvider`. Synthesis uses a deterministic placeholder (no LLM integration yet).
+
+**New files created:**
+
+- `backend/services/orchestrator.py` — The skill chain orchestrator:
+  - `run_orchestrator(tenant_id, access_token, work_object, run_id, stores, drive_provider, on_event)` — Async function that executes the full skill chain sequentially, updating run status and emitting `AgentEvent`s at each step.
+  - **ValidateInputSkill** — Confirms tenant exists and is `active`, confirms Google Drive config has `root_folder_id`. Fails with clear message if tenant is draft or unconfigured.
+  - **RetrieveDocsSkill** — Navigates `root → AgenticKnowledge/{tenant_id}/documents`, tokenizes work object title/description/classification (deduped, stop words stripped), calls `GoogleDriveProvider.search_documents()` with up to 12 tokens. Continues with zero docs on Drive errors instead of failing the run.
+  - **SynthesizeResolutionSkill** — Deterministic placeholder: generates summary referencing ticket title and doc count, builds 4-6 resolution steps, sets confidence to 0.55 if docs found else 0.20.
+  - **RecordOutcomeSkill** — Stores `{summary, steps, sources, confidence}` as `result` on the `AgentRun`, sets status to `completed`.
+  - `_tokenize(work_object)` helper — Extracts search tokens from title/description/classification, filters stop words, limits to 12 tokens.
+  - `_build_steps(work_object, sources)` helper — Generates deterministic resolution steps based on available sources.
+  - Each skill emits `AgentEvent`s with `event_type` progression (`thinking` → `retrieval`/`tool_call` → `complete`/`error`).
+  - 300ms `asyncio.sleep` between skills so WebSocket clients can see each step animate.
+  - Top-level try/except catches unexpected errors, marks run as `failed`, emits `error` event.
+
+- `backend/routers/runs.py` — REST + WebSocket router:
+  - `POST /api/runs` — Validates tenant exists, creates `AgentRun` with `queued` status, kicks off `run_orchestrator` via `BackgroundTasks`. Returns `{run_id}`.
+  - `GET /api/runs?tenant_id=...` — Lists all runs for tenant, newest first.
+  - `GET /api/runs/{run_id}?tenant_id=...` — Gets single run, 404 if tenant mismatch.
+  - `WS /api/runs/{run_id}/events?tenant_id=...` — Validates tenant owns the run (closes with 4004 on mismatch). Replays all existing events in order. If run is already terminal, sends `stream_end` and closes. Otherwise subscribes to live events via in-memory pubsub (`asyncio.Queue` per subscriber). Sends `stream_end` message when run completes/fails/times out (120s).
+  - Module-level `_event_subscribers: dict[str, list[asyncio.Queue]]` — Simple pubsub: `_publish_event`, `_subscribe`, `_unsubscribe`.
+
+**Files modified:**
+
+- `backend/models.py` — Added 5 new models:
+  - `ClassificationPair(name, value)` — Key-value pair for work object classification
+  - `WorkObject(work_id, source_system="ui", record_type="incident", title, description, classification: list[ClassificationPair], metadata: dict | None)` — Canonical work item representation
+  - `CreateRunRequest(tenant_id, access_token, work_object)` — Request body for creating a run (access_token for Drive calls during execution)
+  - `AgentRun(run_id, tenant_id, status: "queued"|"running"|"completed"|"failed", started_at, completed_at, work_object, result: dict | None)` — Run record
+  - `AgentEvent(run_id, skill_id, event_type: "thinking"|"retrieval"|"planning"|"tool_call"|"tool_result"|"verification"|"complete"|"error", summary, confidence, timestamp, metadata: dict | None)` — Structured event (no chain-of-thought leakage)
+
+- `backend/store/interface.py` — Added 2 new ABCs:
+  - `RunStore`: `create_run(run)`, `get_run(run_id)`, `list_runs_for_tenant(tenant_id)`, `update_run(run_id, **kwargs)`
+  - `EventStore`: `append_event(event)`, `list_events_for_run(run_id)`
+
+- `backend/store/memory.py` — Added 2 new implementations:
+  - `InMemoryRunStore` — Dict-backed, keyed by `run_id`. `list_runs_for_tenant` filters by `tenant_id`. `update_run` merges kwargs like existing stores.
+  - `InMemoryEventStore` — Dict of lists, keyed by `run_id`. Append-only.
+
+- `backend/store/__init__.py` — Re-exports `RunStore`, `EventStore`, `InMemoryRunStore`, `InMemoryEventStore`.
+
+- `backend/services/google_drive.py` — Added `search_documents(access_token, folder_id, tokens, limit=10)` method:
+  - Builds a Drive query with `name contains` OR clauses for up to 8 tokens
+  - Excludes folders (`mimeType != folder`)
+  - Returns `list[{name, id, webViewLink}]`
+
+- `backend/routers/__init__.py` — Added `runs_router` re-export.
+
+- `backend/main.py` — Added `run_store = InMemoryRunStore()`, `event_store = InMemoryEventStore()` to `app.state`. Included `runs_router`.
+
+- `vite.config.ts` — Added `ws: true` to the `/api` proxy config so WebSocket connections pass through to the backend.
+
+- `src/app/services/api.ts` — Added types and functions:
+  - `WorkObject` interface — Matches backend model
+  - `AgentRunResponse` interface — Run with `work_object` and nullable `result: {summary, steps, sources, confidence}`
+  - `AgentEventResponse` interface — Event with `skill_id`, `event_type`, `summary`, `confidence`, `metadata`
+  - `createRun(tenantId, accessToken, workObject)` → `POST /api/runs`
+  - `getRuns(tenantId)` → `GET /api/runs?tenant_id=...`
+  - `getRun(tenantId, runId)` → `GET /api/runs/{runId}?tenant_id=...`
+  - `connectRunEvents(runId, tenantId, onEvent, onEnd, onError)` → Opens WebSocket, dispatches events and stream_end, returns the `WebSocket` handle for cleanup
+
+- `src/app/pages/RunsPage.tsx` — Full rewrite:
+  - **Imports:** Removed `mockRuns` from `mockData`. Added `useTenants`, `useGoogleAuth`, `api` imports.
+  - **State:** `runs: AgentRunResponse[]` fetched from backend on tenant change. `events: AgentEventResponse[]` populated via WebSocket. `showNewRun` / `newTitle` / `newDescription` for the creation form.
+  - **Skills timeline built from events:** `buildSkills(events)` function groups events by `skill_id`, derives status (`pending` → `running` → `completed`/`error`), ordered by `SKILL_ORDER` constant.
+  - **WebSocket lifecycle:** On run selection, opens WS, replays existing events, streams live events. On `stream_end`, refreshes the run to pick up final `result`. Cleans up on un-select or unmount.
+  - **New Run form:** Title + description inputs, "Start Run" button. Disabled when not authenticated or no tenant selected. Creates run via `api.createRun()`, auto-selects the new run.
+  - **Run list (left panel):** Shows run title, run_id, status dot, timestamp. "+" button in header for new run. Auth hint when not signed in.
+  - **Run detail (right panel):** Header with title, status badge, run_id, timestamp, description. Skills timeline with expandable event lists (event_type color-coded: green for complete, red for error, gray for others). Result panel for completed runs with summary, steps, sources (links), confidence bar. In-progress banner with spinner. Failed banner with error hint.
+
+- `src/app/data/mockData.ts` — Removed `Run`, `Skill`, `RunResult` interfaces and `mockRuns` array. Only `ClassificationNode` interface remains (still used by `SetupWizardPage.tsx`).
+
+**Updated project structure:**
+```
+backend/
+├── services/
+│   ├── __init__.py
+│   ├── google_drive.py            # Added search_documents()
+│   └── orchestrator.py            # NEW — 4-skill chain orchestrator
+├── models.py                      # Added WorkObject, AgentRun, AgentEvent, etc.
+├── store/
+│   ├── __init__.py                # Re-exports new stores
+│   ├── interface.py               # Added RunStore, EventStore ABCs
+│   └── memory.py                  # Added InMemoryRunStore, InMemoryEventStore
+├── routers/
+│   ├── __init__.py                # Added runs_router
+│   ├── admin.py                   # (unchanged)
+│   ├── tenants.py                 # (unchanged)
+│   └── runs.py                    # NEW — REST + WebSocket endpoints
+└── main.py                        # Added run_store, event_store, runs_router
+
+src/app/
+├── services/
+│   └── api.ts                     # Added run types + createRun/getRuns/getRun/connectRunEvents
+├── pages/
+│   ├── RunsPage.tsx               # Full rewrite — backend-driven with WebSocket events
+│   └── SetupWizardPage.tsx        # (unchanged)
+├── data/
+│   └── mockData.ts                # Reduced to ClassificationNode only
+└── ...
+
+vite.config.ts                     # Added ws: true for WebSocket proxy
+```
+
+**Key architecture decisions:**
+- **Background task execution** — `BackgroundTasks` (FastAPI) kicks off the orchestrator after returning `{run_id}` to the client. No Celery/Redis needed for MVP.
+- **In-memory pubsub for events** — `asyncio.Queue` per WebSocket subscriber. Simple, no external dependencies. Events are also persisted in `EventStore` for replay.
+- **WebSocket replay + live** — On connect, all existing events are sent first, then live events stream until the run is terminal. This means a client that connects mid-run catches up automatically.
+- **Tenant isolation on every endpoint** — REST endpoints validate `tenant_id` matches the run. WebSocket closes with code 4004 on mismatch. Orchestrator validates tenant is `active`.
+- **Token passthrough for Drive calls during execution** — `access_token` is passed in the `CreateRunRequest` and forwarded to `GoogleDriveProvider.search_documents()` during the run. Never stored.
+- **Deterministic synthesis (no LLM)** — SynthesizeResolution generates a structured placeholder. Confidence = 0.55 with docs, 0.20 without. Ready for Claude API swap later.
+- **Graceful Drive failure** — If `search_documents` fails (expired token, network), the run continues with zero docs and lower confidence rather than failing entirely.
+- **Skills timeline derived from events** — Frontend builds skill state from the event stream rather than a separate "skills" API. This means the timeline updates in real-time as events arrive.
+- **No chain-of-thought leakage** — Events contain structured summaries only (`summary` field), not raw LLM reasoning. `metadata` holds safe structured details (token counts, doc counts).
+
+**What GPT should know for next steps:**
+- The execution plane is functional end-to-end: UI → REST → orchestrator → Drive search → synthesis → WS events → UI
+- `mockData.ts` only contains `ClassificationNode` now — all Run/Skill/RunResult types are gone, replaced by `api.ts` types
+- The orchestrator is in `backend/services/orchestrator.py` — each skill is currently inline in `run_orchestrator()`. Future refactoring could extract skills into separate classes.
+- The `search_documents` method on `GoogleDriveProvider` does a `name contains` search — not semantic/embedding-based. Good enough for MVP, can be replaced with vector search later.
+- No ServiceNow writeback skill — the chain ends at RecordOutcome. Writeback would be skill E in a future sprint.
+- No feedback capture — the run result is final. Feedback loop would be a separate sprint.
+- The `access_token` passed at run creation may expire during long runs — for MVP this is acceptable since runs complete in ~2 seconds. For production, token refresh would be needed.
+- WebSocket uses query param `tenant_id` for auth — no header auth on WS. Acceptable for MVP; production would use the activation secret.
+
+---
+
+*Next change will be #007.*

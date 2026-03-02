@@ -47,6 +47,43 @@ export interface ScaffoldApplyResponse {
   created_count: number;
 }
 
+// --- Runs ---
+
+export interface WorkObject {
+  work_id: string;
+  source_system: string;
+  record_type: string;
+  title: string;
+  description: string;
+  classification: { name: string; value: string }[];
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface AgentRunResponse {
+  run_id: string;
+  tenant_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  started_at: string;
+  completed_at: string | null;
+  work_object: WorkObject;
+  result: {
+    summary: string;
+    steps: string[];
+    sources: { title: string; url: string }[];
+    confidence: number;
+  } | null;
+}
+
+export interface AgentEventResponse {
+  run_id: string;
+  skill_id: string;
+  event_type: string;
+  summary: string;
+  confidence: number | null;
+  timestamp: string;
+  metadata: Record<string, unknown> | null;
+}
+
 // --- Helpers ---
 
 class ApiError extends Error {
@@ -186,4 +223,56 @@ export function scaffoldApply(
       schema_tree: schemaTree,
     }),
   });
+}
+
+// --- Runs (server-side) ---
+
+export function createRun(
+  tenantId: string,
+  accessToken: string,
+  workObject: WorkObject,
+): Promise<{ run_id: string }> {
+  return request('/runs', {
+    method: 'POST',
+    body: JSON.stringify({
+      tenant_id: tenantId,
+      access_token: accessToken,
+      work_object: workObject,
+    }),
+  });
+}
+
+export function getRuns(tenantId: string): Promise<AgentRunResponse[]> {
+  return request(`/runs?tenant_id=${encodeURIComponent(tenantId)}`);
+}
+
+export function getRun(
+  tenantId: string,
+  runId: string,
+): Promise<AgentRunResponse> {
+  return request(`/runs/${runId}?tenant_id=${encodeURIComponent(tenantId)}`);
+}
+
+export function connectRunEvents(
+  runId: string,
+  tenantId: string,
+  onEvent: (event: AgentEventResponse) => void,
+  onEnd: (status: string) => void,
+  onError?: (err: Event) => void,
+): WebSocket {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(
+    `${proto}//${window.location.host}/api/runs/${runId}/events?tenant_id=${encodeURIComponent(tenantId)}`,
+  );
+  ws.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
+    if (data.type === 'stream_end') {
+      onEnd(data.status);
+      ws.close();
+    } else {
+      onEvent(data as AgentEventResponse);
+    }
+  };
+  ws.onerror = (err) => onError?.(err);
+  return ws;
 }

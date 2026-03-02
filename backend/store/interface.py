@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from models import ClassificationSchema, GoogleDriveConfig, Tenant
+from models import AgentEvent, AgentRun, ClassificationSchema, GoogleDriveConfig, Tenant
 
 
 class TenantStore(ABC):
@@ -39,3 +39,25 @@ class GoogleDriveConfigStore(ABC):
 
     @abstractmethod
     async def upsert(self, tenant_id: str, **kwargs: Any) -> GoogleDriveConfig: ...
+
+
+class RunStore(ABC):
+    @abstractmethod
+    async def create_run(self, run: AgentRun) -> AgentRun: ...
+
+    @abstractmethod
+    async def get_run(self, run_id: str) -> Optional[AgentRun]: ...
+
+    @abstractmethod
+    async def list_runs_for_tenant(self, tenant_id: str) -> list[AgentRun]: ...
+
+    @abstractmethod
+    async def update_run(self, run_id: str, **kwargs: Any) -> Optional[AgentRun]: ...
+
+
+class EventStore(ABC):
+    @abstractmethod
+    async def append_event(self, event: AgentEvent) -> AgentEvent: ...
+
+    @abstractmethod
+    async def list_events_for_run(self, run_id: str) -> list[AgentEvent]: ...
