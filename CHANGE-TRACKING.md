@@ -863,4 +863,64 @@ src/app/
 - No feedback validation against run status — users can technically submit feedback for any run, though the UI only shows the form for completed runs.
 - The metrics panel is minimal (numbers only, no charts). A future sprint could add time-series visualizations or trend indicators.
 
-*Next change will be #010.*
+---
+
+## #010 — 2026-03-02 — Design Polish Pass on Agent Worker Surface
+
+**What happened:**
+Applied a styling-only polish pass to the RunsPage to align with the reference design system (`src.zip` component kit). No layout changes, no new features, no backend modifications, no data contract changes. All changes are purely visual.
+
+**Files modified:**
+
+- `src/app/pages/RunsPage.tsx` — UI styling updates throughout:
+
+  - **Status badge:** "Completed" text replaced with **"Resolution Ready"**. Badge restyled as a muted blue pill: `bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-[14px] rounded-full`. Calm, not celebratory. Other statuses also updated to pill style with subtle borders.
+
+  - **Result panel heading:** Changed from "Result" to **"Recommended Resolution"**. Added evidence line below: `"Based on {n} knowledge source(s)"` in `text-xs text-gray-400`, only rendered when `sources.length > 0`.
+
+  - **Resolution summary text:** Brightness reduced from default foreground to `text-gray-500` for a softer read.
+
+  - **Confidence bar:** Slimmed from `h-2` to `h-1.5`, track lightened to `bg-gray-100`, fill changed to `bg-blue-500`. Moved above steps for better visual flow.
+
+  - **Resolution steps:** Spacing tightened from `space-y-2` to `space-y-0.5`. Numbered circles added (`w-5 h-5 rounded-full bg-blue-50 text-blue-600`). Step text softened to `text-gray-600`. Rows have `hover:bg-gray-50` with `rounded-md`. Section label renamed from "Recommended Steps" to "Resolution Steps".
+
+  - **Sources section:** Renamed from "Sources" to "Knowledge Sources". Links restyled with `group` hover: text goes `text-gray-500 → text-gray-800`, icon goes `text-gray-400 → text-blue-500`. Spacing tightened to `space-y-1`.
+
+  - **Incident context collapsed by default:** Work object description wrapped in a `<details>` element (closed by default). Summary line reads "Incident Context" with a `ChevronRight` icon that rotates 90° on open via CSS. Classification pairs shown as small rounded pills inside the expanded section.
+
+  - **Active skill in timeline:** Running skills get: left accent border (`border-l-[3px] border-l-blue-500`), subtle elevation (`shadow-sm`), tinted background (`bg-blue-50/40`), bold title. No heavy animation — just a clean active indicator. Timeline spacing tightened from `space-y-3` to `space-y-2`.
+
+  - **Primary button (feedback submit):** Changed from `bg-blue-600` to darker enterprise green (`bg-emerald-700`, `hover:bg-emerald-800`, `active:bg-emerald-900`). Height shortened from `py-2` to `py-1.5`. `Check` icon added on the left (replaced by `Loader2` spinner during submit). Added `font-medium`.
+
+  - **Feedback form inputs:** Height reduced on outcome toggles, select, and textarea (`py-2` → `py-1.5`).
+
+  - **New import:** `Check` from `lucide-react` (for the primary button icon).
+
+- `src/styles/theme.css` — Added CSS rules for `<details>` element:
+  - `details[open] > summary .details-open-rotate { transform: rotate(90deg); }` — Rotates the chevron icon when expanded
+  - `details > summary .details-open-rotate { transition: transform 150ms ease; }` — Smooth rotation transition
+  - `details > summary::-webkit-details-marker, details > summary::marker { display: none; }` — Hides the browser's default disclosure triangle
+
+**Files NOT modified:**
+- No backend files changed
+- No API calls changed
+- No types or data contracts changed
+- `api.ts` unchanged
+- No new dependencies added
+
+**Design decisions:**
+- **"Resolution Ready" over "Completed"** — Matches the reference design's language. Signals that the result is ready for review, not that a process finished. Muted blue (not green) keeps the tone professional and calm.
+- **Evidence line is conditional** — Only appears when sources exist, avoiding misleading "Based on 0 sources" text.
+- **Collapsed incident context** — Reduces visual noise on the detail view. The context is still accessible with one click. Classification pairs are shown as pills for scannability.
+- **Active skill treatment is subtle** — Left border + light shadow + tint. No bounce, no pulse on the card itself (the status dot still pulses). This keeps the timeline scannable during a run without visual distraction.
+- **Enterprise green for primary action** — `emerald-700` reads as "confirm/approve" in enterprise UI patterns. Darker tone avoids the "gaming" feel of bright greens. Check icon reinforces the action intent.
+- **Native `<details>` for collapsible** — No new dependency needed. The CSS rules handle chevron rotation and marker hiding cleanly.
+
+**What GPT should know for next steps:**
+- This was a styling-only pass. All functional behavior is unchanged.
+- The `<details>` element uses a CSS class `details-open-rotate` for chevron animation — any future collapsible sections can reuse this pattern.
+- The status badge now uses `rounded-full` pill styling with subtle borders across all states (not just completed).
+- The result panel has a more structured hierarchy: heading → evidence line → summary → confidence → steps → sources → run ID.
+- The feedback form button is now green (`emerald-700`) while the "Start Run" button remains blue (`blue-600`) — this distinguishes creation from confirmation actions.
+
+*Next change will be #011.*
