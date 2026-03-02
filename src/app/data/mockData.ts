@@ -15,12 +15,6 @@ export interface Tenant {
   };
 }
 
-export interface ClassificationLevel {
-  levelKey: string;
-  displayName: string;
-  required: boolean;
-}
-
 export interface ClassificationNode {
   name: string;
   children: ClassificationNode[];
@@ -295,33 +289,3 @@ export const setCurrentTenant = (id: string) => {
   currentTenantId = id;
 };
 
-let nextId = mockTenants.length + 1;
-
-export const getTenants = (): Tenant[] => mockTenants;
-
-export const getTenantById = (id: string): Tenant | undefined =>
-  mockTenants.find((t) => t.id === id);
-
-export const addTenant = (tenant: Omit<Tenant, 'id' | 'createdAt'>): Tenant => {
-  const newTenant: Tenant = {
-    ...tenant,
-    id: String(nextId++),
-    createdAt: new Date().toISOString(),
-  };
-  mockTenants.push(newTenant);
-  return newTenant;
-};
-
-export const updateTenant = (id: string, updates: Partial<Omit<Tenant, 'id'>>): Tenant | null => {
-  const index = mockTenants.findIndex((t) => t.id === id);
-  if (index === -1) return null;
-  mockTenants[index] = { ...mockTenants[index], ...updates };
-  return mockTenants[index];
-};
-
-export const deleteTenant = (id: string): boolean => {
-  const index = mockTenants.findIndex((t) => t.id === id);
-  if (index === -1) return false;
-  mockTenants.splice(index, 1);
-  return true;
-};

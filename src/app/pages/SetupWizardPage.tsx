@@ -3,9 +3,10 @@ import { useNavigate, useParams } from 'react-router';
 import { ChevronLeft, ChevronRight, Plus, Trash2, CheckCircle, XCircle, Loader2, LogOut, FolderOpen, CornerDownRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { SetupStepper } from '../components/SetupStepper';
-import { addTenant, getTenantById, updateTenant, type ClassificationNode } from '../data/mockData';
+import { type ClassificationNode } from '../data/mockData';
 import { useGoogleAuth } from '../auth/GoogleAuthContext';
 import { testDriveFolder, scaffoldDrive, uploadSchemaFile, type ScaffoldProgress } from '../services/google-drive';
+import * as api from '../services/api';
 
 const steps = [
   { id: 1, title: 'Create Tenant' },
@@ -135,6 +136,9 @@ export function SetupWizardPage() {
   const { id } = useParams();
   const [currentStep, setCurrentStep] = useState(0);
 
+  // Tenant ID — set from URL param or after create
+  const [tenantId, setTenantId] = useState<string | null>(id || null);
+
   // Form state
   const [tenantName, setTenantName] = useState('');
   const [instanceUrl, setInstanceUrl] = useState('');
@@ -145,6 +149,12 @@ export function SetupWizardPage() {
   ]);
   const [folderId, setFolderId] = useState('');
   const [folderName, setFolderName] = useState('');
+
+  // Saving guard
+  const [saving, setSaving] = useState(false);
+
+  // Activation result
+  const [activationResult, setActivationResult] = useState<api.ActivateResponse | null>(null);
 
   // Google Auth
   const { isAuthenticated, accessToken, userEmail, signIn, signOut: googleSignOut, isInitialized, initError, configureClientId, needsClientId } = useGoogleAuth();
@@ -164,23 +174,31 @@ export function SetupWizardPage() {
 
   // Load existing tenant for editing
   useEffect(() => {
-    if (id) {
-      const existing = getTenantById(id);
-      if (existing) {
-        setTenantName(existing.name);
-        if (existing.servicenow) {
-          setInstanceUrl(existing.servicenow.instanceUrl);
-          setUsername(existing.servicenow.username);
+    if (!id) return;
+    const load = async () => {
+      try {
+        const [tenant, schema, driveConfig] = await Promise.all([
+          api.getTenant(id),
+          api.getSchema(id).catch(() => null),
+          api.getDriveConfig(id).catch(() => null),
+        ]);
+        setTenantName(tenant.name);
+        setTenantId(tenant.id);
+        if (schema && schema.schema_tree.length > 0) {
+          setClassificationNodes(schema.schema_tree);
         }
-        if (existing.classificationSchema?.length) {
-          setClassificationNodes(existing.classificationSchema);
+        if (driveConfig) {
+          setFolderId(driveConfig.root_folder_id);
+          if (driveConfig.folder_name) setFolderName(driveConfig.folder_name);
+          if (driveConfig.scaffolded) setScaffoldStatus('done');
         }
-        if (existing.googleDrive) {
-          setFolderId(existing.googleDrive.folderId);
-        }
+      } catch {
+        toast.error('Failed to load tenant');
+        navigate('/tenants');
       }
-    }
-  }, [id]);
+    };
+    load();
+  }, [id, navigate]);
 
   const handleTestServiceNow = () => {
     setSnowStatus('testing');
@@ -229,6 +247,11 @@ export function SetupWizardPage() {
       const name = await testDriveFolder(accessToken, folderId.trim());
       setFolderName(name);
       setDriveStatus('success');
+
+      // Persist drive config to backend
+      if (tenantId) {
+        await api.putDriveConfig(tenantId, folderId.trim(), name);
+      }
     } catch (err) {
       setDriveStatus('error');
       setDriveError(err instanceof Error ? err.message : 'Connection failed');
@@ -241,7 +264,7 @@ export function SetupWizardPage() {
     setScaffoldProgress(null);
     setScaffoldError('');
     try {
-      const tenantIdForScaffold = id || tenantName || 'default';
+      const tenantIdForScaffold = tenantId || tenantName || 'default';
       const { schemaFolderId } = await scaffoldDrive(
         accessToken,
         folderId.trim(),
@@ -256,6 +279,16 @@ export function SetupWizardPage() {
 
       setScaffoldStatus('done');
       toast.success('Drive scaffold applied successfully');
+
+      // Persist scaffold result to backend
+      if (tenantId) {
+        await api.postScaffoldResult(tenantId, {
+          scaffolded: true,
+          scaffolded_at: new Date().toISOString(),
+          root_folder_id: folderId.trim(),
+          folder_name: folderName || undefined,
+        });
+      }
     } catch (err) {
       setScaffoldStatus('error');
       setScaffoldError(err instanceof Error ? err.message : 'Scaffold failed');
@@ -263,29 +296,50 @@ export function SetupWizardPage() {
     }
   };
 
-  const handleActivate = () => {
-    const tenantData = {
-      name: tenantName || 'Untitled Tenant',
-      status: 'Active' as const,
-      servicenow: instanceUrl ? { instanceUrl, username } : undefined,
-      classificationSchema: classificationNodes.filter((n) => n.name),
-      googleDrive: folderId ? { folderId, folderName: folderName || undefined, scaffolded: scaffoldStatus === 'done' } : undefined,
-    };
-
-    if (id) {
-      updateTenant(id, tenantData);
-    } else {
-      addTenant(tenantData);
+  const handleActivate = async () => {
+    if (!tenantId) return;
+    setSaving(true);
+    try {
+      const result = await api.activateTenant(tenantId);
+      setActivationResult(result);
+      toast.success('Tenant activated');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Activation failed');
+    } finally {
+      setSaving(false);
     }
-
-    navigate('/tenants');
   };
 
-  const handleNext = () => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      handleActivate();
+  const handleNext = async () => {
+    if (saving) return;
+    setSaving(true);
+
+    try {
+      // Step 0 → 1: create tenant
+      if (currentStep === 0 && !tenantId) {
+        if (!tenantName.trim()) {
+          toast.error('Please enter a tenant name');
+          return;
+        }
+        const tenant = await api.createTenant(tenantName.trim());
+        setTenantId(tenant.id);
+        navigate(`/tenants/setup/${tenant.id}`, { replace: true });
+      }
+
+      // Step 2 → 3: persist classification schema
+      if (currentStep === 2 && tenantId) {
+        await api.putSchema(tenantId, classificationNodes);
+      }
+
+      if (currentStep < steps.length - 1) {
+        setCurrentStep(currentStep + 1);
+      } else {
+        await handleActivate();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -527,7 +581,7 @@ export function SetupWizardPage() {
 
       case 4: {
         const canScaffold = isAuthenticated && driveStatus === 'success' && folderId.trim();
-        const tenantIdForPreview = id || tenantName || 'default';
+        const tenantIdForPreview = tenantId || tenantName || 'default';
         const nodeCount = countClassificationNodes(classificationNodes);
         return (
           <div className="space-y-4">
@@ -606,35 +660,64 @@ export function SetupWizardPage() {
       case 5:
         return (
           <div className="space-y-4">
-            <div className="border border-border rounded-lg p-6 bg-green-50">
-              <h3 className="text-sm mb-2">Ready to Activate</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                All configuration steps are complete. Click &ldquo;Activate&rdquo; to enable this
-                tenant.
-              </p>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tenant Name:</span>
-                  <span>{tenantName || 'Not set'}</span>
+            {activationResult ? (
+              <div className="border border-border rounded-lg p-6 bg-green-50 space-y-4">
+                <div className="flex items-center gap-2 text-green-800">
+                  <CheckCircle className="w-5 h-5" />
+                  <h3 className="text-sm font-medium">Tenant Activated</h3>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">ServiceNow:</span>
-                  <span>{instanceUrl ? 'Configured' : 'Not configured'}</span>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Shared Secret:</span>
+                    <code className="block mt-1 p-2 bg-white border border-border rounded text-xs break-all">
+                      {activationResult.shared_secret}
+                    </code>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Instructions:</span>
+                    <pre className="mt-1 p-2 bg-white border border-border rounded text-xs whitespace-pre-wrap">
+                      {activationResult.instructions_stub}
+                    </pre>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Classification:</span>
-                  <span>{countClassificationNodes(classificationNodes)} categories</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Google Drive:</span>
-                  <span>{folderId ? (folderName ? `"${folderName}" (verified)` : 'Configured') : 'Not configured'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Scaffold:</span>
-                  <span>{scaffoldStatus === 'done' ? 'Applied' : 'Not applied'}</span>
+                <button
+                  onClick={() => navigate('/tenants')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="border border-border rounded-lg p-6 bg-green-50">
+                <h3 className="text-sm mb-2">Ready to Activate</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  All configuration steps are complete. Click &ldquo;Activate&rdquo; to enable this
+                  tenant.
+                </p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tenant Name:</span>
+                    <span>{tenantName || 'Not set'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">ServiceNow:</span>
+                    <span>{instanceUrl ? 'Configured' : 'Not configured'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Classification:</span>
+                    <span>{countClassificationNodes(classificationNodes)} categories</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Google Drive:</span>
+                    <span>{folderId ? (folderName ? `"${folderName}" (verified)` : 'Configured') : 'Not configured'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Scaffold:</span>
+                    <span>{scaffoldStatus === 'done' ? 'Applied' : 'Not applied'}</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         );
 
@@ -680,13 +763,17 @@ export function SetupWizardPage() {
           >
             Back
           </button>
-          <button
-            onClick={handleNext}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
-          >
-            {currentStep === steps.length - 1 ? 'Activate' : 'Next'}
-            {currentStep < steps.length - 1 && <ChevronRight className="w-4 h-4" />}
-          </button>
+          {activationResult ? null : (
+            <button
+              onClick={handleNext}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm disabled:opacity-50"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {currentStep === steps.length - 1 ? 'Activate' : 'Next'}
+              {currentStep < steps.length - 1 && !saving && <ChevronRight className="w-4 h-4" />}
+            </button>
+          )}
         </div>
       </div>
     </div>

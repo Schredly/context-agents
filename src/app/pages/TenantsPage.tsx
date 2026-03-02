@@ -1,18 +1,39 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, Trash2, Settings } from 'lucide-react';
-import { getTenants, deleteTenant } from '../data/mockData';
+import { Plus, Trash2, Settings, Loader2 } from 'lucide-react';
+import { getTenants, deleteTenant, type TenantResponse } from '../services/api';
 import { format } from 'date-fns';
 
 export function TenantsPage() {
   const navigate = useNavigate();
-  const [tenants, setTenants] = useState(getTenants());
+  const [tenants, setTenants] = useState<TenantResponse[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this tenant?')) {
-      deleteTenant(id);
-      setTenants([...getTenants()]);
+  const fetchTenants = async () => {
+    try {
+      const data = await getTenants();
+      setTenants(data);
+    } catch {
+      // silently handle — list will be empty
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    fetchTenants();
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this tenant?')) {
+      await deleteTenant(id);
+      await fetchTenants();
+    }
+  };
+
+  const displayStatus = (status: string) => {
+    // Backend stores lowercase; display capitalised
+    return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
   return (
@@ -33,68 +54,83 @@ export function TenantsPage() {
         </button>
       </div>
 
-      <div className="bg-white border border-border rounded-lg overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-border">
-            <tr>
-              <th className="text-left px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
-                Name
-              </th>
-              <th className="text-left px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
-                Status
-              </th>
-              <th className="text-left px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
-                Created At
-              </th>
-              <th className="text-right px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {tenants.map((tenant) => (
-              <tr key={tenant.id} className="hover:bg-gray-50/50 transition-colors">
-                <td className="px-6 py-4 text-sm">{tenant.name}</td>
-                <td className="px-6 py-4">
-                  <span
-                    className={`
-                      inline-flex px-2 py-0.5 rounded text-xs
-                      ${
-                        tenant.status === 'Active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-600'
-                      }
-                    `}
-                  >
-                    {tenant.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-muted-foreground">
-                  {format(new Date(tenant.createdAt), 'MMM d, yyyy')}
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => navigate(`/tenants/setup/${tenant.id}`)}
-                      className="p-2 hover:bg-gray-100 rounded transition-colors"
-                      title="Open Setup"
-                    >
-                      <Settings className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(tenant.id)}
-                      className="p-2 hover:bg-red-50 rounded transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-600" />
-                    </button>
-                  </div>
-                </td>
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+          Loading tenants...
+        </div>
+      ) : (
+        <div className="bg-white border border-border rounded-lg overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-border">
+              <tr>
+                <th className="text-left px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
+                  Name
+                </th>
+                <th className="text-left px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="text-left px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
+                  Created At
+                </th>
+                <th className="text-right px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {tenants.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                    No tenants yet. Click &ldquo;Create Tenant&rdquo; to get started.
+                  </td>
+                </tr>
+              ) : (
+                tenants.map((tenant) => (
+                  <tr key={tenant.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4 text-sm">{tenant.name}</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`
+                          inline-flex px-2 py-0.5 rounded text-xs
+                          ${
+                            tenant.status === 'active'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-600'
+                          }
+                        `}
+                      >
+                        {displayStatus(tenant.status)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                      {format(new Date(tenant.created_at), 'MMM d, yyyy')}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => navigate(`/tenants/setup/${tenant.id}`)}
+                          className="p-2 hover:bg-gray-100 rounded transition-colors"
+                          title="Open Setup"
+                        >
+                          <Settings className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(tenant.id)}
+                          className="p-2 hover:bg-red-50 rounded transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
