@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronDown, ChevronRight, ExternalLink, Plus, Loader2 } from 'lucide-react';
+import { CheckCircle, ChevronDown, ChevronRight, ExternalLink, Plus, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useTenants } from '../context/TenantContext';
@@ -56,6 +56,16 @@ export function RunsPage() {
   const [events, setEvents] = useState<api.AgentEventResponse[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Feedback state
+  const [fbOutcome, setFbOutcome] = useState<'success' | 'fail' | null>(null);
+  const [fbReason, setFbReason] = useState<string>('resolved');
+  const [fbNotes, setFbNotes] = useState('');
+  const [fbSubmitting, setFbSubmitting] = useState(false);
+  const [fbRecorded, setFbRecorded] = useState(false);
+
+  // Metrics state
+  const [metrics, setMetrics] = useState<api.MetricsResponse | null>(null);
+
   // New Run dialog
   const [showNewRun, setShowNewRun] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -77,6 +87,31 @@ export function RunsPage() {
   }, [currentTenantId]);
 
   useEffect(() => { fetchRuns(); }, [fetchRuns]);
+
+  // Fetch metrics when tenant changes
+  useEffect(() => {
+    if (!currentTenantId) { setMetrics(null); return; }
+    api.getMetrics(currentTenantId).then(setMetrics).catch(() => setMetrics(null));
+  }, [currentTenantId]);
+
+  // Load existing feedback when selecting a completed run
+  useEffect(() => {
+    setFbOutcome(null);
+    setFbReason('resolved');
+    setFbNotes('');
+    setFbRecorded(false);
+    if (!selectedRunId || !currentTenantId) return;
+    const run = runs.find(r => r.run_id === selectedRunId);
+    if (run?.status !== 'completed') return;
+    api.getFeedback(selectedRunId, currentTenantId).then(fb => {
+      if (fb) {
+        setFbOutcome(fb.outcome);
+        setFbReason(fb.reason);
+        setFbNotes(fb.notes);
+        setFbRecorded(true);
+      }
+    }).catch(() => {});
+  }, [selectedRunId, currentTenantId, runs]);
 
   // Connect WebSocket when selecting a run
   useEffect(() => {
@@ -141,6 +176,22 @@ export function RunsPage() {
     }
   };
 
+  const handleSubmitFeedback = async () => {
+    if (!currentTenantId || !selectedRunId || !fbOutcome) return;
+    setFbSubmitting(true);
+    try {
+      await api.submitFeedback(currentTenantId, selectedRunId, fbOutcome, fbReason, fbNotes);
+      setFbRecorded(true);
+      toast.success('Feedback recorded');
+      // Refresh metrics
+      api.getMetrics(currentTenantId).then(setMetrics).catch(() => {});
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit feedback');
+    } finally {
+      setFbSubmitting(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'bg-green-500';
@@ -196,6 +247,36 @@ export function RunsPage() {
             <p className="text-xs text-yellow-700 mt-1">Sign in with Google to create runs</p>
           )}
         </div>
+
+        {/* Metrics Summary */}
+        {metrics && (
+          <div className="px-4 py-3 border-b border-border">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-gray-50 rounded p-2">
+                <div className="text-muted-foreground">Success Rate</div>
+                <div className="text-sm font-medium">
+                  {metrics.success_rate != null ? `${Math.round(metrics.success_rate * 100)}%` : '—'}
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded p-2">
+                <div className="text-muted-foreground">Avg Confidence</div>
+                <div className="text-sm font-medium">
+                  {metrics.avg_confidence != null ? `${Math.round(metrics.avg_confidence * 100)}%` : '—'}
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded p-2">
+                <div className="text-muted-foreground">Doc Hit Rate</div>
+                <div className="text-sm font-medium">
+                  {metrics.doc_hit_rate != null ? `${Math.round(metrics.doc_hit_rate * 100)}%` : '—'}
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded p-2">
+                <div className="text-muted-foreground">Total Runs</div>
+                <div className="text-sm font-medium">{metrics.total_runs}</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
@@ -412,6 +493,84 @@ export function RunsPage() {
                 <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
                   <div className="text-sm text-muted-foreground">Run ID</div>
                   <div className="text-sm font-mono">{selectedRun.run_id}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Feedback Form */}
+            {selectedRun.status === 'completed' && (
+              <div className="border border-border rounded-lg p-6 bg-white mt-6">
+                <h2 className="text-lg mb-4">
+                  {fbRecorded ? (
+                    <span className="flex items-center gap-2">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      Feedback Recorded
+                    </span>
+                  ) : 'Rate this Result'}
+                </h2>
+
+                <div className="space-y-4">
+                  {/* Outcome toggle */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setFbOutcome('success'); setFbRecorded(false); }}
+                      className={`px-4 py-2 rounded-md text-sm border transition-colors ${
+                        fbOutcome === 'success'
+                          ? 'border-green-500 bg-green-50 text-green-700'
+                          : 'border-border hover:bg-gray-50'
+                      }`}
+                    >
+                      Success
+                    </button>
+                    <button
+                      onClick={() => { setFbOutcome('fail'); setFbRecorded(false); }}
+                      className={`px-4 py-2 rounded-md text-sm border transition-colors ${
+                        fbOutcome === 'fail'
+                          ? 'border-red-500 bg-red-50 text-red-700'
+                          : 'border-border hover:bg-gray-50'
+                      }`}
+                    >
+                      Fail
+                    </button>
+                  </div>
+
+                  {/* Reason select */}
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-1">Reason</label>
+                    <select
+                      value={fbReason}
+                      onChange={e => { setFbReason(e.target.value); setFbRecorded(false); }}
+                      className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="resolved">Resolved</option>
+                      <option value="partial">Partial</option>
+                      <option value="wrong-doc">Wrong Document</option>
+                      <option value="missing-context">Missing Context</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-1">Notes (optional)</label>
+                    <textarea
+                      value={fbNotes}
+                      onChange={e => { setFbNotes(e.target.value); setFbRecorded(false); }}
+                      rows={2}
+                      placeholder="Any additional comments..."
+                      className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    />
+                  </div>
+
+                  {/* Submit */}
+                  <button
+                    onClick={handleSubmitFeedback}
+                    disabled={!fbOutcome || fbSubmitting}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm disabled:opacity-50"
+                  >
+                    {fbSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {fbRecorded ? 'Resubmit' : 'Submit Feedback'}
+                  </button>
                 </div>
               </div>
             )}

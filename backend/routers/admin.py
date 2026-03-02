@@ -2,10 +2,13 @@ import secrets
 
 from fastapi import APIRouter, Request, HTTPException
 
+from collections import Counter
+
 from models import (
     ActivateResponse,
     ClassificationSchema,
     GoogleDriveConfig,
+    MetricsResponse,
     PutDriveConfigRequest,
     PutSchemaRequest,
     PutServiceNowConfigRequest,
@@ -180,4 +183,97 @@ async def post_scaffold_result(
         scaffolded_at=body.scaffolded_at,
         root_folder_id=body.root_folder_id,
         folder_name=body.folder_name,
+    )
+
+
+# --- Metrics ---
+
+
+@router.get("/metrics", response_model=MetricsResponse)
+async def get_metrics(tenant_id: str, request: Request):
+    await _require_tenant(tenant_id, request)
+
+    runs = await request.app.state.run_store.list_runs_for_tenant(tenant_id)
+    feedback_list = await request.app.state.feedback_store.list_for_tenant(tenant_id)
+
+    total_runs = len(runs)
+    completed_runs_list = [r for r in runs if r.status == "completed"]
+    completed_runs = len(completed_runs_list)
+
+    # success_rate from feedback
+    feedback_count = len(feedback_list)
+    success_rate = None
+    if feedback_count > 0:
+        success_count = sum(1 for fb in feedback_list if fb.outcome == "success")
+        success_rate = success_count / feedback_count
+
+    # avg_confidence from completed runs with results
+    confidences = [
+        r.result["confidence"]
+        for r in completed_runs_list
+        if r.result and "confidence" in r.result
+    ]
+    avg_confidence = sum(confidences) / len(confidences) if confidences else None
+
+    # doc_hit_rate: fraction of completed runs where sources is non-empty
+    runs_with_results = [r for r in completed_runs_list if r.result]
+    if runs_with_results:
+        hits = sum(1 for r in runs_with_results if r.result.get("sources"))
+        doc_hit_rate = hits / len(runs_with_results)
+    else:
+        doc_hit_rate = None
+
+    # avg_latency_seconds
+    latencies = []
+    for r in completed_runs_list:
+        if r.completed_at and r.started_at:
+            diff = (r.completed_at - r.started_at).total_seconds()
+            latencies.append(diff)
+    avg_latency_seconds = sum(latencies) / len(latencies) if latencies else None
+
+    # writeback_success_rate from event_store
+    writeback_success_rate = None
+    writeback_run_ids: set[str] = set()
+    writeback_complete_run_ids: set[str] = set()
+    for r in runs:
+        events = await request.app.state.event_store.list_events_for_run(r.run_id)
+        for ev in events:
+            if ev.skill_id == "Writeback":
+                writeback_run_ids.add(r.run_id)
+                if ev.event_type == "complete":
+                    writeback_complete_run_ids.add(r.run_id)
+    if writeback_run_ids:
+        writeback_success_rate = len(writeback_complete_run_ids) / len(writeback_run_ids)
+
+    # breakdown_by_classification_path
+    path_counter: Counter[str] = Counter()
+    path_success: Counter[str] = Counter()
+    for fb in feedback_list:
+        path = fb.classification_path or "(none)"
+        path_counter[path] += 1
+        if fb.outcome == "success":
+            path_success[path] += 1
+    breakdown = sorted(
+        [
+            {
+                "classification_path": path,
+                "count": count,
+                "success_rate": path_success[path] / count if count else 0,
+            }
+            for path, count in path_counter.items()
+        ],
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:10]
+
+    return MetricsResponse(
+        total_runs=total_runs,
+        completed_runs=completed_runs,
+        success_rate=success_rate,
+        avg_confidence=avg_confidence,
+        doc_hit_rate=doc_hit_rate,
+        avg_latency_seconds=avg_latency_seconds,
+        writeback_success_rate=writeback_success_rate,
+        feedback_count=feedback_count,
+        breakdown_by_classification_path=breakdown,
     )

@@ -5,7 +5,7 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, WebSocket, WebSocketDisconnect
 
-from models import AgentEvent, AgentRun, CreateRunRequest, ServiceNowRunRequest, WorkObject
+from models import AgentEvent, AgentRun, CreateFeedbackRequest, CreateRunRequest, FeedbackEvent, ServiceNowRunRequest, WorkObject
 from services.google_drive import GoogleDriveProvider
 from services.orchestrator import run_orchestrator
 from services.servicenow import ServiceNowProvider
@@ -204,3 +204,38 @@ async def run_events_ws(websocket: WebSocket, run_id: str, tenant_id: str = ""):
         pass
     finally:
         _unsubscribe(run_id, queue)
+
+
+# --- Feedback endpoints ---
+
+
+@router.post("/feedback", status_code=201)
+async def submit_feedback(body: CreateFeedbackRequest, request: Request):
+    run = await request.app.state.run_store.get_run(body.run_id)
+    if run is None or run.tenant_id != body.tenant_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    classification_path = "/".join(
+        cp.value for cp in run.work_object.classification
+    ) if run.work_object.classification else ""
+
+    event = FeedbackEvent(
+        id=f"fb_{uuid.uuid4().hex[:12]}",
+        tenant_id=body.tenant_id,
+        run_id=body.run_id,
+        work_id=run.work_object.work_id,
+        outcome=body.outcome,
+        reason=body.reason,
+        notes=body.notes,
+        classification_path=classification_path,
+    )
+    stored = await request.app.state.feedback_store.append(event)
+    return stored.model_dump(mode="json")
+
+
+@router.get("/feedback/{run_id}")
+async def get_feedback(run_id: str, tenant_id: str, request: Request):
+    fb = await request.app.state.feedback_store.get_by_run(run_id)
+    if fb is None or fb.tenant_id != tenant_id:
+        return None
+    return fb.model_dump(mode="json")

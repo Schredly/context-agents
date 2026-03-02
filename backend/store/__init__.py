@@ -1,6 +1,7 @@
 from store.interface import (
     ClassificationSchemaStore,
     EventStore,
+    FeedbackStore,
     GoogleDriveConfigStore,
     RunStore,
     ServiceNowConfigStore,
@@ -9,6 +10,7 @@ from store.interface import (
 from store.memory import (
     InMemoryClassificationSchemaStore,
     InMemoryEventStore,
+    InMemoryFeedbackStore,
     InMemoryGoogleDriveConfigStore,
     InMemoryRunStore,
     InMemoryServiceNowConfigStore,
@@ -22,10 +24,12 @@ __all__ = [
     "ServiceNowConfigStore",
     "RunStore",
     "EventStore",
+    "FeedbackStore",
     "InMemoryTenantStore",
     "InMemoryClassificationSchemaStore",
     "InMemoryGoogleDriveConfigStore",
     "InMemoryServiceNowConfigStore",
     "InMemoryRunStore",
     "InMemoryEventStore",
+    "InMemoryFeedbackStore",
 ]

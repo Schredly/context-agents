@@ -5,6 +5,7 @@ from routers import admin_router, runs_router, tenants_router
 from store import (
     InMemoryClassificationSchemaStore,
     InMemoryEventStore,
+    InMemoryFeedbackStore,
     InMemoryGoogleDriveConfigStore,
     InMemoryRunStore,
     InMemoryServiceNowConfigStore,
@@ -28,6 +29,7 @@ app.state.drive_config_store = InMemoryGoogleDriveConfigStore()
 app.state.snow_config_store = InMemoryServiceNowConfigStore()
 app.state.run_store = InMemoryRunStore()
 app.state.event_store = InMemoryEventStore()
+app.state.feedback_store = InMemoryFeedbackStore()
 
 app.include_router(tenants_router)
 app.include_router(admin_router)

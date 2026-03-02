@@ -173,3 +173,38 @@ class AgentEvent(BaseModel):
     confidence: Optional[float] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Optional[dict[str, Any]] = None
+
+
+# --- Feedback & Metrics models ---
+
+
+class FeedbackEvent(BaseModel):
+    id: str
+    tenant_id: str
+    run_id: str
+    work_id: str
+    outcome: Literal["success", "fail"]
+    reason: Literal["resolved", "partial", "wrong-doc", "missing-context", "other"]
+    notes: str = ""
+    classification_path: str = ""
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CreateFeedbackRequest(BaseModel):
+    tenant_id: str
+    run_id: str
+    outcome: Literal["success", "fail"]
+    reason: Literal["resolved", "partial", "wrong-doc", "missing-context", "other"]
+    notes: str = ""
+
+
+class MetricsResponse(BaseModel):
+    total_runs: int
+    completed_runs: int
+    success_rate: Optional[float] = None
+    avg_confidence: Optional[float] = None
+    doc_hit_rate: Optional[float] = None
+    avg_latency_seconds: Optional[float] = None
+    writeback_success_rate: Optional[float] = None
+    feedback_count: int
+    breakdown_by_classification_path: list[dict[str, Any]]

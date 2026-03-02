@@ -9,6 +9,7 @@ from models import (
     AgentRun,
     ClassificationNodeModel,
     ClassificationSchema,
+    FeedbackEvent,
     GoogleDriveConfig,
     ServiceNowConfig,
     Tenant,
@@ -16,6 +17,7 @@ from models import (
 from store.interface import (
     ClassificationSchemaStore,
     EventStore,
+    FeedbackStore,
     GoogleDriveConfigStore,
     RunStore,
     ServiceNowConfigStore,
@@ -154,3 +156,18 @@ class InMemoryEventStore(EventStore):
 
     async def list_events_for_run(self, run_id: str) -> list[AgentEvent]:
         return list(self._events.get(run_id, []))
+
+
+class InMemoryFeedbackStore(FeedbackStore):
+    def __init__(self) -> None:
+        self._feedback: dict[str, FeedbackEvent] = {}  # keyed by run_id
+
+    async def append(self, event: FeedbackEvent) -> FeedbackEvent:
+        self._feedback[event.run_id] = event
+        return event
+
+    async def get_by_run(self, run_id: str) -> Optional[FeedbackEvent]:
+        return self._feedback.get(run_id)
+
+    async def list_for_tenant(self, tenant_id: str) -> list[FeedbackEvent]:
+        return [fb for fb in self._feedback.values() if fb.tenant_id == tenant_id]

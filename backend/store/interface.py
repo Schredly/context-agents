@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from models import AgentEvent, AgentRun, ClassificationSchema, GoogleDriveConfig, ServiceNowConfig, Tenant
+from models import AgentEvent, AgentRun, ClassificationSchema, FeedbackEvent, GoogleDriveConfig, ServiceNowConfig, Tenant
 
 
 class TenantStore(ABC):
@@ -69,3 +69,14 @@ class EventStore(ABC):
 
     @abstractmethod
     async def list_events_for_run(self, run_id: str) -> list[AgentEvent]: ...
+
+
+class FeedbackStore(ABC):
+    @abstractmethod
+    async def append(self, event: FeedbackEvent) -> FeedbackEvent: ...
+
+    @abstractmethod
+    async def get_by_run(self, run_id: str) -> Optional[FeedbackEvent]: ...
+
+    @abstractmethod
+    async def list_for_tenant(self, tenant_id: str) -> list[FeedbackEvent]: ...

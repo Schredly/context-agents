@@ -253,6 +253,64 @@ export function scaffoldApply(
   });
 }
 
+// --- Feedback & Metrics ---
+
+export interface FeedbackEventResponse {
+  id: string;
+  tenant_id: string;
+  run_id: string;
+  work_id: string;
+  outcome: 'success' | 'fail';
+  reason: 'resolved' | 'partial' | 'wrong-doc' | 'missing-context' | 'other';
+  notes: string;
+  classification_path: string;
+  timestamp: string;
+}
+
+export interface MetricsResponse {
+  total_runs: number;
+  completed_runs: number;
+  success_rate: number | null;
+  avg_confidence: number | null;
+  doc_hit_rate: number | null;
+  avg_latency_seconds: number | null;
+  writeback_success_rate: number | null;
+  feedback_count: number;
+  breakdown_by_classification_path: Record<string, unknown>[];
+}
+
+export function submitFeedback(
+  tenantId: string,
+  runId: string,
+  outcome: 'success' | 'fail',
+  reason: string,
+  notes: string,
+): Promise<FeedbackEventResponse> {
+  return request('/runs/feedback', {
+    method: 'POST',
+    body: JSON.stringify({
+      tenant_id: tenantId,
+      run_id: runId,
+      outcome,
+      reason,
+      notes,
+    }),
+  });
+}
+
+export function getFeedback(
+  runId: string,
+  tenantId: string,
+): Promise<FeedbackEventResponse | null> {
+  return request(
+    `/runs/feedback/${runId}?tenant_id=${encodeURIComponent(tenantId)}`,
+  );
+}
+
+export function getMetrics(tenantId: string): Promise<MetricsResponse> {
+  return request(`/admin/${tenantId}/metrics`);
+}
+
 // --- Runs (server-side) ---
 
 export function createRun(
