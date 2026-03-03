@@ -1336,4 +1336,82 @@ Added a two-step ServiceNow worker flow: preview a run without writeback, then e
 - The `tenant_secret` is required on both endpoints — the compact UI will need it passed from the ServiceNow UI Action context.
 - No changes to WebSocket protocol — preview runs terminate at RecordOutcome (Skill D) and emit `stream_end` normally.
 
-*Next change will be #018.*
+---
+
+## #018 — 2026-03-03 — Compact ServiceNow Worker UI (Popup Modal)
+
+**What happened:**
+Added a standalone popup page at `/worker/servicenow` designed to be opened from a ServiceNow UI Action in a small browser window (~520px). The page reads incident data from URL query parameters, runs a preview (no writeback), displays live skill traces and the AI resolution result, then lets the user approve writeback to ServiceNow with an "Update Task" button. This is a frontend-only sprint — no backend changes.
+
+**Files created:**
+
+- `src/app/pages/WorkerServiceNowPage.tsx` — Complete standalone page component:
+  - **Query param parsing:** Reads `tenant_id`, `tenant_secret`, `sys_id`, `number`, `short_description` (required) and `description`, `category`, `subcategory`, `business_service`, `work_notes` (optional) from `window.location.search`. Missing required params render a compact error panel listing what's missing.
+  - **Status pill:** Header displays "AI Resolution Assistant" title with a status pill cycling through: Ready → Running → Resolution Ready → Updated / Writeback Failed / Error.
+  - **Section A — Incident Summary:** Collapsible `<details>` element (closed by default) showing `short_description`, classification pills (Category/Subcategory/Service from query params), description, and a work_notes snippet if present.
+  - **Section B — Extra Context:** Textarea for optional user input appended to the description before the run. Only shown in "ready" state.
+  - **Section C — Run Button:** Full-width "Run" button calling `createRunFromServiceNowPreview()`. Disabled during execution. Shows spinner while creating.
+  - **Section D — Live Skill Trace:** Compact version of RunsPage's skill timeline. Shows 4 skills (ValidateInput → RetrieveDocs → SynthesizeResolution → RecordOutcome). Each skill card is expandable with a `SkillTrace` component rendering Intent / Tool Call / Result / Error / Completion sections. Active skill has left blue border accent and subtle shadow. All text sizes reduced (text-xs / text-[11px] / text-[10px]) for compact layout.
+  - **Section E — Result Panel:** Rendered when run status is `completed` or `fallback_completed`. Shows "Recommended Resolution" heading, evidence line, fallback indicator (amber banner if applicable), summary text, confidence bar, numbered resolution steps, knowledge sources with external links, and run ID.
+  - **Section F — Writeback Approval:** "Update Task" button (emerald-700, full width) enabled only when run is terminal with a result and not already updated. Calls `approveRunWriteback()`. On success: status becomes "Updated" with green confirmation banner. On failure: status becomes "Writeback Failed" with red banner and retry hint. Button shows spinner during the call.
+  - **WebSocket lifecycle:** Connects via `connectRunEvents()` when `runId` is set. On `stream_end`, fetches the final run via `getRun()` to populate result panel. Cleans up on unmount.
+  - **Classification mapping:** Builds classification array from query params: `category` → `{name:"Category", value}`, `subcategory` → `{name:"Subcategory", value}`, `business_service` → `{name:"Service", value}`.
+  - **Own `<Toaster />`:** Since this page is outside DashboardLayout, it mounts its own sonner Toaster.
+  - **Inline sub-components:** `SkillTrace` (compact version), `buildSkills()`, `statusPill()`, `getSkillStatusColor()`, `useQueryParams()`, `getMissingParams()`.
+
+**Files modified:**
+
+- `src/app/routes.tsx` — Added import of `WorkerServiceNowPage` and route entry `{ path: '/worker/servicenow', Component: WorkerServiceNowPage }` as a top-level route (outside the DashboardLayout children). This means no sidebar, no top bar — just the standalone page.
+
+- `src/app/services/api.ts` — Added 2 functions + 1 interface:
+  - `ServiceNowPreviewRequest` interface — Matches `ServiceNowRunRequest` backend model: `tenant_id`, `tenant_secret`, `sys_id`, `number`, `short_description`, `description?`, `classification?`, `metadata?`, `access_token?`.
+  - `createRunFromServiceNowPreview(body)` → `POST /api/runs/from/servicenow/preview`. Returns `{run_id}`.
+  - `approveRunWriteback(runId, tenantId, tenantSecret, sysId, notePrefix?)` → `POST /api/runs/{runId}/writeback/approve?tenant_id=...`. Body: `{tenant_secret, sys_id, note_prefix}`. Returns `{ok: boolean}`.
+  - **Fix:** `AgentRunResponse.status` type updated from `'queued' | 'running' | 'completed' | 'failed'` to include `'fallback_completed'` — this was a pre-existing gap that prevented the frontend from correctly handling fallback runs.
+
+**Files NOT modified:**
+- No backend files changed
+- `RunsPage.tsx` unchanged (existing admin UI untouched)
+- `DashboardLayout.tsx` unchanged
+- `Sidebar.tsx` unchanged — no nav entry for worker page (it's only opened from ServiceNow)
+- No new dependencies added
+- No style files changed (reuses existing `details-open-rotate` CSS from theme.css)
+
+**Updated project structure:**
+```
+src/app/
+├── pages/
+│   ├── WorkerServiceNowPage.tsx   # NEW — Compact popup for ServiceNow workers
+│   ├── RunsPage.tsx               # (unchanged)
+│   ├── TenantsPage.tsx            # (unchanged)
+│   ├── SetupWizardPage.tsx        # (unchanged)
+│   └── ObservabilityPage.tsx      # (unchanged)
+├── routes.tsx                     # Added /worker/servicenow route (top-level)
+├── services/
+│   └── api.ts                     # Added preview + approve functions, fixed status type
+└── ...
+```
+
+**Key architecture decisions:**
+- **Top-level route, not DashboardLayout child** — `/worker/servicenow` is a peer of the DashboardLayout route tree, not nested inside it. This means no sidebar, no top bar, no tenant context provider — the page is fully self-contained with all context from URL params. This is intentional for the popup use case.
+- **All context from URL query params** — No React context, no localStorage, no auth flow. The ServiceNow UI Action passes everything the page needs via the URL. This makes the page stateless and embeddable.
+- **Own Toaster instance** — Since DashboardLayout provides the Toaster for admin pages, and this page is outside that layout, it mounts its own `<Toaster />`.
+- **Compact SkillTrace is a copy, not shared** — The SkillTrace component is duplicated from RunsPage with smaller text sizes rather than extracted to a shared component. This avoids coupling the worker page to admin page internals and keeps changes isolated.
+- **SKILL_ORDER excludes Writeback** — The worker page only shows 4 skills (A→D) since preview runs never execute Skill E. This differs from RunsPage which includes Writeback in its SKILL_ORDER.
+- **`fallback_completed` treated as terminal success** — Both `completed` and `fallback_completed` trigger the result panel and enable the "Update Task" button. The `TERMINAL_STATUSES` constant handles this consistently.
+- **Extra context appended to description** — The optional textarea content is appended to the ServiceNow description with a separator, not sent as a separate field. This means it flows through the existing orchestrator pipeline without any backend changes.
+- **No note_prefix** — The approve call omits `note_prefix` (sends null). The work notes are formatted using the standard `format_work_notes()` template. A future iteration could let the user customize this.
+
+**ServiceNow UI Action URL pattern:**
+```
+/worker/servicenow?tenant_id=...&tenant_secret=...&sys_id=...&number=INC0012345&short_description=VPN+not+connecting&category=Network&subcategory=VPN&description=...
+```
+
+**What GPT should know for next steps:**
+- The worker page is fully functional end-to-end: URL params → preview run → WebSocket events → result display → writeback approval.
+- The `AgentRunResponse.status` type now correctly includes `fallback_completed`. RunsPage still gates result rendering on `status === 'completed'` only — a future fix could update it to also show results for `fallback_completed` runs.
+- The worker page doesn't use `useTenants()` or `useGoogleAuth()` — it's entirely self-contained from URL params. No Google OAuth token is available in the popup context, so `access_token` is omitted from the preview request.
+- The `ServiceNowPreviewRequest` interface mirrors the backend `ServiceNowRunRequest` model exactly — the same body shape works for both endpoints.
+- The SkillTrace duplication between RunsPage and WorkerServiceNowPage could be extracted to a shared component in a future refactoring sprint if needed.
+
+*Next change will be #019.*
