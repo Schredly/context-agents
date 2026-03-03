@@ -1,17 +1,21 @@
 import secrets
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Query, Request, HTTPException
 
 from collections import Counter
+from typing import Optional
 
 from models import (
     ActivateResponse,
     ClassificationSchema,
     GoogleDriveConfig,
     MetricsResponse,
+    ObservabilitySummaryResponse,
+    ObservabilityTrendsResponse,
     PutDriveConfigRequest,
     PutSchemaRequest,
     PutServiceNowConfigRequest,
+    RunTelemetry,
     ScaffoldApplyRequest,
     ScaffoldApplyResponse,
     ScaffoldResultRequest,
@@ -20,6 +24,7 @@ from models import (
     TestDriveFolderResponse,
 )
 from services.google_drive import GoogleDriveError, GoogleDriveProvider
+from services.telemetry import aggregate_observability, build_run_telemetry, compute_trends
 
 _drive = GoogleDriveProvider()
 
@@ -277,3 +282,87 @@ async def get_metrics(tenant_id: str, request: Request):
         feedback_count=feedback_count,
         breakdown_by_classification_path=breakdown,
     )
+
+
+# --- Observability ---
+
+
+async def _build_tenant_telemetries(
+    tenant_id: str, request: Request
+) -> tuple[list[RunTelemetry], dict[str, "FeedbackEvent"]]:
+    """Build telemetry for all runs in a tenant, caching in telemetry_store."""
+    from models import FeedbackEvent  # noqa: F811
+
+    runs = await request.app.state.run_store.list_runs_for_tenant(tenant_id)
+    telemetry_store = request.app.state.telemetry_store
+    feedback_store = request.app.state.feedback_store
+    event_store = request.app.state.event_store
+
+    telemetries: list[RunTelemetry] = []
+    feedback_map: dict[str, FeedbackEvent] = {}
+
+    for run in runs:
+        # Skip runs that are still queued/running
+        if run.status not in ("completed", "failed"):
+            continue
+
+        # Check cache first
+        cached = await telemetry_store.get(run.run_id)
+        if cached is not None:
+            telemetries.append(cached)
+        else:
+            events = await event_store.list_events_for_run(run.run_id)
+            feedback = await feedback_store.get_by_run(run.run_id)
+            rt = build_run_telemetry(run, events, feedback)
+            await telemetry_store.upsert(rt)
+            telemetries.append(rt)
+
+        fb = await feedback_store.get_by_run(run.run_id)
+        if fb is not None:
+            feedback_map[run.run_id] = fb
+
+    return telemetries, feedback_map
+
+
+@router.get("/observability/summary", response_model=ObservabilitySummaryResponse)
+async def get_observability_summary(tenant_id: str, request: Request):
+    await _require_tenant(tenant_id, request)
+    telemetries, feedback_map = await _build_tenant_telemetries(tenant_id, request)
+    return aggregate_observability(tenant_id, telemetries, feedback_map)
+
+
+@router.get("/observability/trends", response_model=ObservabilityTrendsResponse)
+async def get_observability_trends(
+    tenant_id: str,
+    request: Request,
+    window: Optional[int] = Query(None, description="7 or 30"),
+):
+    await _require_tenant(tenant_id, request)
+    telemetries, feedback_map = await _build_tenant_telemetries(tenant_id, request)
+
+    if window == 7:
+        return ObservabilityTrendsResponse(
+            last_7d=compute_trends(telemetries, 7, feedback_map),
+        )
+    if window == 30:
+        return ObservabilityTrendsResponse(
+            last_30d=compute_trends(telemetries, 30, feedback_map),
+        )
+    # Default: return both
+    return ObservabilityTrendsResponse(
+        last_7d=compute_trends(telemetries, 7, feedback_map),
+        last_30d=compute_trends(telemetries, 30, feedback_map),
+    )
+
+
+@router.get("/observability/runs", response_model=list[RunTelemetry])
+async def get_observability_runs(
+    tenant_id: str,
+    request: Request,
+    limit: int = Query(50, ge=1, le=500),
+):
+    await _require_tenant(tenant_id, request)
+    telemetries, _ = await _build_tenant_telemetries(tenant_id, request)
+    # Newest first
+    telemetries.sort(key=lambda t: t.started_at, reverse=True)
+    return telemetries[:limit]

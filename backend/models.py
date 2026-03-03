@@ -208,3 +208,73 @@ class MetricsResponse(BaseModel):
     writeback_success_rate: Optional[float] = None
     feedback_count: int
     breakdown_by_classification_path: list[dict[str, Any]]
+
+
+# --- Telemetry & Observability models ---
+
+
+class SkillTelemetry(BaseModel):
+    skill_id: str
+    status: Literal["completed", "failed", "skipped"]
+    duration_ms: Optional[int] = None
+    tool_calls: int = 0
+    tool_errors: int = 0
+    model: Optional[str] = None
+    model_latency_ms: Optional[int] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    doc_count: Optional[int] = None
+    fallback_used: Optional[bool] = None
+
+
+class RunTelemetry(BaseModel):
+    tenant_id: str
+    run_id: str
+    work_id: str
+    source_system: str
+    record_type: str
+    classification_path: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    status: Literal["completed", "failed"]
+    duration_ms: Optional[int] = None
+    confidence: Optional[float] = None
+    doc_hit: Optional[bool] = None
+    writeback_attempted: bool = False
+    writeback_success: Optional[bool] = None
+    fallback_used: bool = False
+    model: Optional[str] = None
+    total_input_tokens: Optional[int] = None
+    total_output_tokens: Optional[int] = None
+    skills: list[SkillTelemetry] = Field(default_factory=list)
+
+
+class ObservabilitySummaryResponse(BaseModel):
+    total_runs: int
+    completed_runs: int
+    failed_runs: int
+    runs_last_7d: int
+    runs_last_30d: int
+    avg_duration_ms: Optional[float] = None
+    p95_duration_ms: Optional[int] = None
+    avg_confidence: Optional[float] = None
+    doc_hit_rate: Optional[float] = None
+    fallback_rate: Optional[float] = None
+    writeback_success_rate: Optional[float] = None
+    model_mix: list[dict[str, Any]] = Field(default_factory=list)
+    top_classification_paths: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ObservabilityTrendPoint(BaseModel):
+    date: str
+    runs: int
+    success_rate: Optional[float] = None
+    avg_confidence: Optional[float] = None
+    fallback_rate: Optional[float] = None
+    doc_hit_rate: Optional[float] = None
+    avg_duration_ms: Optional[float] = None
+
+
+class ObservabilityTrendsResponse(BaseModel):
+    last_7d: list[ObservabilityTrendPoint] = Field(default_factory=list)
+    last_30d: list[ObservabilityTrendPoint] = Field(default_factory=list)

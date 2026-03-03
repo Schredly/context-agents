@@ -11,6 +11,7 @@ from models import (
     ClassificationSchema,
     FeedbackEvent,
     GoogleDriveConfig,
+    RunTelemetry,
     ServiceNowConfig,
     Tenant,
 )
@@ -21,6 +22,7 @@ from store.interface import (
     GoogleDriveConfigStore,
     RunStore,
     ServiceNowConfigStore,
+    TelemetryStore,
     TenantStore,
 )
 
@@ -171,3 +173,18 @@ class InMemoryFeedbackStore(FeedbackStore):
 
     async def list_for_tenant(self, tenant_id: str) -> list[FeedbackEvent]:
         return [fb for fb in self._feedback.values() if fb.tenant_id == tenant_id]
+
+
+class InMemoryTelemetryStore(TelemetryStore):
+    def __init__(self) -> None:
+        self._telemetry: dict[str, RunTelemetry] = {}  # keyed by run_id
+
+    async def upsert(self, run_telemetry: RunTelemetry) -> RunTelemetry:
+        self._telemetry[run_telemetry.run_id] = run_telemetry
+        return run_telemetry
+
+    async def get(self, run_id: str) -> Optional[RunTelemetry]:
+        return self._telemetry.get(run_id)
+
+    async def list_for_tenant(self, tenant_id: str) -> list[RunTelemetry]:
+        return [t for t in self._telemetry.values() if t.tenant_id == tenant_id]

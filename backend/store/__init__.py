@@ -5,6 +5,7 @@ from store.interface import (
     GoogleDriveConfigStore,
     RunStore,
     ServiceNowConfigStore,
+    TelemetryStore,
     TenantStore,
 )
 from store.memory import (
@@ -14,6 +15,7 @@ from store.memory import (
     InMemoryGoogleDriveConfigStore,
     InMemoryRunStore,
     InMemoryServiceNowConfigStore,
+    InMemoryTelemetryStore,
     InMemoryTenantStore,
 )
 
@@ -25,6 +27,7 @@ __all__ = [
     "RunStore",
     "EventStore",
     "FeedbackStore",
+    "TelemetryStore",
     "InMemoryTenantStore",
     "InMemoryClassificationSchemaStore",
     "InMemoryGoogleDriveConfigStore",
@@ -32,4 +35,5 @@ __all__ = [
     "InMemoryRunStore",
     "InMemoryEventStore",
     "InMemoryFeedbackStore",
+    "InMemoryTelemetryStore",
 ]
