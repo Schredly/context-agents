@@ -4,6 +4,7 @@ import { TenantsPage } from './pages/TenantsPage';
 import { SetupWizardPage } from './pages/SetupWizardPage';
 import { RunsPage } from './pages/RunsPage';
 import { ObservabilityPage } from './pages/ObservabilityPage';
+import { WorkerServiceNowPage } from './pages/WorkerServiceNowPage';
 
 export const router = createBrowserRouter([
   {
@@ -39,5 +40,9 @@ export const router = createBrowserRouter([
         element: <div className="p-8 text-muted-foreground">Settings (Coming Soon)</div>,
       },
     ],
+  },
+  {
+    path: '/worker/servicenow',
+    Component: WorkerServiceNowPage,
   },
 ]);

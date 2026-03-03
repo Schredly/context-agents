@@ -62,7 +62,7 @@ export interface WorkObject {
 export interface AgentRunResponse {
   run_id: string;
   tenant_id: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'fallback_completed';
   started_at: string;
   completed_at: string | null;
   work_object: WorkObject;
@@ -456,4 +456,47 @@ export function connectRunEvents(
   };
   ws.onerror = (err) => onError?.(err);
   return ws;
+}
+
+// --- ServiceNow Preview + Approve ---
+
+export interface ServiceNowPreviewRequest {
+  tenant_id: string;
+  tenant_secret: string;
+  sys_id: string;
+  number: string;
+  short_description: string;
+  description?: string;
+  classification?: { name: string; value: string }[];
+  metadata?: Record<string, unknown> | null;
+  access_token?: string | null;
+}
+
+export function createRunFromServiceNowPreview(
+  body: ServiceNowPreviewRequest,
+): Promise<{ run_id: string }> {
+  return request('/runs/from/servicenow/preview', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function approveRunWriteback(
+  runId: string,
+  tenantId: string,
+  tenantSecret: string,
+  sysId: string,
+  notePrefix?: string,
+): Promise<{ ok: boolean }> {
+  return request(
+    `/runs/${runId}/writeback/approve?tenant_id=${encodeURIComponent(tenantId)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        tenant_secret: tenantSecret,
+        sys_id: sysId,
+        note_prefix: notePrefix ?? null,
+      }),
+    },
+  );
 }
