@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router';
-import { Users, Activity, Settings } from 'lucide-react';
+import { Users, Activity, BarChart3, Settings } from 'lucide-react';
 
 export function Sidebar() {
   const location = useLocation();
@@ -7,6 +7,7 @@ export function Sidebar() {
   const navItems = [
     { name: 'Tenants', path: '/tenants', icon: Users },
     { name: 'Runs', path: '/runs', icon: Activity },
+    { name: 'Observability', path: '/admin/observability', icon: BarChart3 },
     { name: 'Settings', path: '/settings', icon: Settings, disabled: true },
   ];
 

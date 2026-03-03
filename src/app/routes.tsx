@@ -3,6 +3,7 @@ import { DashboardLayout } from './layouts/DashboardLayout';
 import { TenantsPage } from './pages/TenantsPage';
 import { SetupWizardPage } from './pages/SetupWizardPage';
 import { RunsPage } from './pages/RunsPage';
+import { ObservabilityPage } from './pages/ObservabilityPage';
 
 export const router = createBrowserRouter([
   {
@@ -28,6 +29,10 @@ export const router = createBrowserRouter([
       {
         path: 'runs',
         Component: RunsPage,
+      },
+      {
+        path: 'admin/observability',
+        Component: ObservabilityPage,
       },
       {
         path: 'settings',

@@ -311,6 +311,101 @@ export function getMetrics(tenantId: string): Promise<MetricsResponse> {
   return request(`/admin/${tenantId}/metrics`);
 }
 
+// --- Observability ---
+
+export interface SkillTelemetryResponse {
+  skill_id: string;
+  status: 'completed' | 'failed' | 'skipped';
+  duration_ms: number | null;
+  tool_calls: number;
+  tool_errors: number;
+  model: string | null;
+  model_latency_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  doc_count: number | null;
+  fallback_used: boolean | null;
+}
+
+export interface RunTelemetryResponse {
+  tenant_id: string;
+  run_id: string;
+  work_id: string;
+  source_system: string;
+  record_type: string;
+  classification_path: string;
+  started_at: string;
+  completed_at: string | null;
+  status: 'completed' | 'failed';
+  duration_ms: number | null;
+  confidence: number | null;
+  doc_hit: boolean | null;
+  writeback_attempted: boolean;
+  writeback_success: boolean | null;
+  fallback_used: boolean;
+  model: string | null;
+  total_input_tokens: number | null;
+  total_output_tokens: number | null;
+  skills: SkillTelemetryResponse[];
+}
+
+export interface ObservabilitySummaryResponse {
+  total_runs: number;
+  completed_runs: number;
+  failed_runs: number;
+  runs_last_7d: number;
+  runs_last_30d: number;
+  avg_duration_ms: number | null;
+  p95_duration_ms: number | null;
+  avg_confidence: number | null;
+  doc_hit_rate: number | null;
+  fallback_rate: number | null;
+  writeback_success_rate: number | null;
+  model_mix: { model: string; count: number }[];
+  top_classification_paths: {
+    path: string;
+    count: number;
+    success_rate: number | null;
+    avg_confidence: number | null;
+  }[];
+}
+
+export interface ObservabilityTrendPoint {
+  date: string;
+  runs: number;
+  success_rate: number | null;
+  avg_confidence: number | null;
+  fallback_rate: number | null;
+  doc_hit_rate: number | null;
+  avg_duration_ms: number | null;
+}
+
+export interface ObservabilityTrendsResponse {
+  last_7d: ObservabilityTrendPoint[];
+  last_30d: ObservabilityTrendPoint[];
+}
+
+export function getObservabilitySummary(
+  tenantId: string,
+): Promise<ObservabilitySummaryResponse> {
+  return request(`/admin/${tenantId}/observability/summary`);
+}
+
+export function getObservabilityTrends(
+  tenantId: string,
+  window?: 7 | 30,
+): Promise<ObservabilityTrendsResponse> {
+  const qs = window ? `?window=${window}` : '';
+  return request(`/admin/${tenantId}/observability/trends${qs}`);
+}
+
+export function getObservabilityRuns(
+  tenantId: string,
+  limit: number = 50,
+): Promise<RunTelemetryResponse[]> {
+  return request(`/admin/${tenantId}/observability/runs?limit=${limit}`);
+}
+
 // --- Runs (server-side) ---
 
 export function createRun(
