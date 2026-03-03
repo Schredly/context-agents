@@ -9,6 +9,7 @@ from models import (
     AgentEvent,
     AgentRun,
     FeedbackEvent,
+    MetricsEvent,
     ObservabilitySummaryResponse,
     ObservabilityTrendPoint,
     ObservabilityTrendsResponse,
@@ -199,6 +200,7 @@ def aggregate_observability(
     tenant_id: str,
     run_telemetries: list[RunTelemetry],
     feedback_map: Optional[dict[str, FeedbackEvent]] = None,
+    metrics_events: Optional[list[MetricsEvent]] = None,
 ) -> ObservabilitySummaryResponse:
     now = datetime.now(timezone.utc)
     d7 = now - timedelta(days=7)
@@ -236,12 +238,19 @@ def aggregate_observability(
         if total > 0 else None
     )
 
-    # Writeback success rate
-    wb_attempted = [r for r in run_telemetries if r.writeback_attempted]
+    # Writeback success rate — prefer MetricsEvents when available
     wb_success_rate: Optional[float] = None
-    if wb_attempted:
-        wb_succeeded = sum(1 for r in wb_attempted if r.writeback_success is True)
-        wb_success_rate = wb_succeeded / len(wb_attempted)
+    if metrics_events:
+        wb_success_count = sum(1 for e in metrics_events if e.event_type == "writeback_success")
+        wb_failed_count = sum(1 for e in metrics_events if e.event_type == "writeback_failed")
+        wb_total = wb_success_count + wb_failed_count
+        if wb_total > 0:
+            wb_success_rate = wb_success_count / wb_total
+    else:
+        wb_attempted = [r for r in run_telemetries if r.writeback_attempted]
+        if wb_attempted:
+            wb_succeeded = sum(1 for r in wb_attempted if r.writeback_success is True)
+            wb_success_rate = wb_succeeded / len(wb_attempted)
 
     # Model mix
     model_counter: Counter[str] = Counter()

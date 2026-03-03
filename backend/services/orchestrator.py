@@ -316,11 +316,12 @@ async def run_orchestrator(
             await emit("Writeback", "thinking", "Writing resolution back to ServiceNow...")
 
             writeback_error: str | None = None
+            writeback_http_status: int | None = None
+            sys_id = (work_object.metadata or {}).get("sys_id", "")
             try:
                 notes = format_work_notes(
                     summary_text, steps, result_sources, confidence, run_id
                 )
-                sys_id = (work_object.metadata or {}).get("sys_id", "")
                 await emit(
                     "Writeback",
                     "tool_call",
@@ -334,22 +335,23 @@ async def run_orchestrator(
                     password=snow_config.password,
                     sys_id=sys_id,
                     work_notes=notes,
+                    tenant_id=tenant_id,
                 )
             except ServiceNowError as exc:
                 writeback_error = str(exc)
+                writeback_http_status = exc.status_code
                 await emit_metric("tool_failed", skill_name="Writeback", metadata={"error": str(exc)})
             except Exception as exc:
                 writeback_error = str(exc)
                 await emit_metric("tool_failed", skill_name="Writeback", metadata={"error": str(exc)})
 
-            # Set terminal status BEFORE emitting the terminal event
-            await run_store.update_run(
-                run_id,
-                status=terminal_status,
-                completed_at=datetime.now(timezone.utc),
-            )
-
             if writeback_error is None:
+                # Writeback succeeded — keep terminal_status
+                await run_store.update_run(
+                    run_id,
+                    status=terminal_status,
+                    completed_at=datetime.now(timezone.utc),
+                )
                 await emit(
                     "Writeback",
                     "tool_result",
@@ -362,13 +364,30 @@ async def run_orchestrator(
                     confidence=confidence,
                 )
                 await emit_metric("skill_completed", skill_name="Writeback", metadata={"status": "completed"})
+                await emit_metric("writeback_success", skill_name="Writeback", metadata={
+                    "sys_id": sys_id,
+                    "tenant_id": tenant_id,
+                })
             else:
+                # Writeback failed — run status becomes "failed"
+                await run_store.update_run(
+                    run_id,
+                    status="failed",
+                    completed_at=datetime.now(timezone.utc),
+                )
                 await emit(
                     "Writeback",
                     "error",
                     f"ServiceNow writeback failed: {writeback_error}",
                 )
                 await emit_metric("skill_completed", skill_name="Writeback", metadata={"status": "failed"})
+                await emit_metric("writeback_failed", skill_name="Writeback", metadata={
+                    "sys_id": sys_id,
+                    "tenant_id": tenant_id,
+                    "http_status": writeback_http_status,
+                    "error_message": writeback_error,
+                })
+                terminal_status = "failed"
 
         # Emit run_completed metric
         await emit_metric("run_completed", metadata={"status": terminal_status, "fallback": used_fallback, "confidence": confidence})

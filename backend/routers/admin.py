@@ -328,7 +328,8 @@ async def _build_tenant_telemetries(
 async def get_observability_summary(tenant_id: str, request: Request):
     await _require_tenant(tenant_id, request)
     telemetries, feedback_map = await _build_tenant_telemetries(tenant_id, request)
-    return aggregate_observability(tenant_id, telemetries, feedback_map)
+    metrics_events = await request.app.state.metrics_event_store.list_for_tenant(tenant_id)
+    return aggregate_observability(tenant_id, telemetries, feedback_map, metrics_events)
 
 
 @router.get("/observability/trends", response_model=ObservabilityTrendsResponse)

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 import httpx
+
+
+logger = logging.getLogger(__name__)
 
 
 class ServiceNowError(Exception):
@@ -19,9 +24,15 @@ class ServiceNowProvider:
         password: str,
         sys_id: str,
         work_notes: str,
+        *,
+        tenant_id: str = "",
     ) -> None:
         """PATCH /api/now/table/incident/{sys_id} to append work_notes."""
         url = f"{instance_url.rstrip('/')}/api/now/table/incident/{sys_id}"
+        logger.debug(
+            "Writeback starting: tenant_id=%s sys_id=%s url=%s",
+            tenant_id, sys_id, url,
+        )
         async with httpx.AsyncClient(timeout=15) as client:
             res = await client.patch(
                 url,
@@ -39,10 +50,17 @@ class ServiceNowProvider:
                 detail = body.get("error", {}).get("message", "")
             except Exception:
                 pass
-            raise ServiceNowError(
-                res.status_code,
-                detail or f"ServiceNow API error ({res.status_code})",
+            error_msg = detail or f"ServiceNow API error ({res.status_code})"
+            logger.error(
+                "Writeback failed: tenant_id=%s sys_id=%s http_status=%d error=%s",
+                tenant_id, sys_id, res.status_code, error_msg,
             )
+            raise ServiceNowError(res.status_code, error_msg)
+
+        logger.debug(
+            "Writeback succeeded: tenant_id=%s sys_id=%s http_status=%d",
+            tenant_id, sys_id, res.status_code,
+        )
 
 
 def format_work_notes(

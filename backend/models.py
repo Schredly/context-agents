@@ -226,6 +226,8 @@ class MetricsEvent(BaseModel):
         "tool_failed",
         "run_completed",
         "feedback_recorded",
+        "writeback_success",
+        "writeback_failed",
     ]
     skill_name: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
