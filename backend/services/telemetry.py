@@ -167,7 +167,10 @@ def build_run_telemetry(
 
     model = model_counter.most_common(1)[0][0] if model_counter else None
 
-    status = "completed" if run.status == "completed" else "failed"
+    if run.status in ("completed", "fallback_completed"):
+        status = "fallback_completed" if fallback_used else "completed"
+    else:
+        status = "failed"
 
     return RunTelemetry(
         tenant_id=run.tenant_id,
@@ -202,7 +205,7 @@ def aggregate_observability(
     d30 = now - timedelta(days=30)
 
     total = len(run_telemetries)
-    completed = sum(1 for r in run_telemetries if r.status == "completed")
+    completed = sum(1 for r in run_telemetries if r.status in ("completed", "fallback_completed"))
     failed = sum(1 for r in run_telemetries if r.status == "failed")
     last_7d = sum(1 for r in run_telemetries if r.started_at >= d7)
     last_30d = sum(1 for r in run_telemetries if r.started_at >= d30)
@@ -268,7 +271,7 @@ def aggregate_observability(
                     successes += 1
             else:
                 rated += 1
-                if r.status == "completed":
+                if r.status in ("completed", "fallback_completed"):
                     successes += 1
         sr = successes / rated if rated > 0 else None
         confs = [r.confidence for r in path_runs if r.confidence is not None]
@@ -279,6 +282,50 @@ def aggregate_observability(
             "success_rate": sr,
             "avg_confidence": ac,
         })
+
+    # Model latency avg (from skill-level model_latency_ms)
+    latencies: list[int] = []
+    for r in run_telemetries:
+        for s in r.skills:
+            if s.model_latency_ms is not None:
+                latencies.append(s.model_latency_ms)
+    model_latency_avg = sum(latencies) / len(latencies) if latencies else None
+
+    # Confidence vs outcome matrix
+    fb_map = feedback_map or {}
+    hi_conf_pos = 0
+    hi_conf_neg = 0
+    lo_conf_pos = 0
+    lo_conf_neg = 0
+    matrix_total = 0
+    for r in run_telemetries:
+        if r.confidence is None:
+            continue
+        matrix_total += 1
+        high = r.confidence >= 0.7
+        fb = fb_map.get(r.run_id)
+        if fb:
+            positive = fb.outcome == "success"
+        else:
+            positive = r.status in ("completed", "fallback_completed")
+        if high and positive:
+            hi_conf_pos += 1
+        elif high and not positive:
+            hi_conf_neg += 1
+        elif not high and positive:
+            lo_conf_pos += 1
+        else:
+            lo_conf_neg += 1
+
+    def _pct(n: int) -> Optional[float]:
+        return n / matrix_total if matrix_total > 0 else None
+
+    confidence_outcome_matrix = [
+        {"label": "high_confidence_positive", "count": hi_conf_pos, "rate": _pct(hi_conf_pos)},
+        {"label": "high_confidence_negative", "count": hi_conf_neg, "rate": _pct(hi_conf_neg)},
+        {"label": "low_confidence_positive", "count": lo_conf_pos, "rate": _pct(lo_conf_pos)},
+        {"label": "low_confidence_negative", "count": lo_conf_neg, "rate": _pct(lo_conf_neg)},
+    ]
 
     return ObservabilitySummaryResponse(
         total_runs=total,
@@ -292,8 +339,10 @@ def aggregate_observability(
         doc_hit_rate=doc_hit_rate,
         fallback_rate=fallback_rate,
         writeback_success_rate=wb_success_rate,
+        model_latency_avg=model_latency_avg,
         model_mix=model_mix,
         top_classification_paths=top_paths,
+        confidence_outcome_matrix=confidence_outcome_matrix,
     )
 
 
@@ -332,7 +381,7 @@ def compute_trends(
             if fb:
                 if fb.outcome == "success":
                     successes += 1
-            elif r.status == "completed":
+            elif r.status in ("completed", "fallback_completed"):
                 successes += 1
         sr = successes / count
 

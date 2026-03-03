@@ -303,7 +303,7 @@ async def _build_tenant_telemetries(
 
     for run in runs:
         # Skip runs that are still queued/running
-        if run.status not in ("completed", "failed"):
+        if run.status not in ("completed", "failed", "fallback_completed"):
             continue
 
         # Check cache first

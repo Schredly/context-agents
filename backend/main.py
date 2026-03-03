@@ -7,6 +7,7 @@ from store import (
     InMemoryEventStore,
     InMemoryFeedbackStore,
     InMemoryGoogleDriveConfigStore,
+    InMemoryMetricsEventStore,
     InMemoryRunStore,
     InMemoryServiceNowConfigStore,
     InMemoryTelemetryStore,
@@ -31,6 +32,7 @@ app.state.snow_config_store = InMemoryServiceNowConfigStore()
 app.state.run_store = InMemoryRunStore()
 app.state.event_store = InMemoryEventStore()
 app.state.feedback_store = InMemoryFeedbackStore()
+app.state.metrics_event_store = InMemoryMetricsEventStore()
 app.state.telemetry_store = InMemoryTelemetryStore()
 
 app.include_router(tenants_router)

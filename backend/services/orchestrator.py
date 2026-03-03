@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Coroutine
 
-from models import AgentEvent, AgentRun, WorkObject
+from models import AgentEvent, AgentRun, MetricsEvent, WorkObject
 from services.claude_client import ClaudeClientError, synthesize_resolution
 from services.google_drive import GoogleDriveError, GoogleDriveProvider
 from services.servicenow import ServiceNowError, format_work_notes
@@ -25,6 +26,7 @@ async def run_orchestrator(
     on_event: Callable[[AgentEvent], Coroutine] | None = None,
     snow_config_store: Any = None,
     snow_provider: Any = None,
+    metrics_event_store: Any = None,
 ) -> None:
     """Execute the skill chain for a run. Updates run status and emits events."""
 
@@ -48,18 +50,37 @@ async def run_orchestrator(
             await on_event(event)
         return event
 
+    async def emit_metric(
+        event_type: str,
+        skill_name: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        if metrics_event_store is None:
+            return
+        await metrics_event_store.append(MetricsEvent(
+            id=f"me_{uuid.uuid4().hex[:12]}",
+            tenant_id=tenant_id,
+            run_id=run_id,
+            event_type=event_type,  # type: ignore[arg-type]
+            skill_name=skill_name,
+            metadata=metadata,
+        ))
+
     await run_store.update_run(run_id, status="running")
 
     try:
         # --- Skill A: ValidateInput ---
+        await emit_metric("skill_started", skill_name="ValidateInput")
         await emit("ValidateInput", "thinking", "Validating tenant and configuration...")
 
         tenant = await tenant_store.get(tenant_id)
         if tenant is None:
             await emit("ValidateInput", "error", "Tenant not found.")
+            await emit_metric("skill_completed", skill_name="ValidateInput", metadata={"status": "failed"})
             await run_store.update_run(
                 run_id, status="failed", completed_at=datetime.now(timezone.utc)
             )
+            await emit_metric("run_completed", metadata={"status": "failed"})
             return
 
         if tenant.status != "active":
@@ -68,9 +89,11 @@ async def run_orchestrator(
                 "error",
                 f"Tenant is '{tenant.status}' — must be 'active' to run.",
             )
+            await emit_metric("skill_completed", skill_name="ValidateInput", metadata={"status": "failed"})
             await run_store.update_run(
                 run_id, status="failed", completed_at=datetime.now(timezone.utc)
             )
+            await emit_metric("run_completed", metadata={"status": "failed"})
             return
 
         drive_config = await drive_config_store.get_by_tenant(tenant_id)
@@ -80,9 +103,11 @@ async def run_orchestrator(
                 "error",
                 "No Google Drive config found. Complete the setup wizard first.",
             )
+            await emit_metric("skill_completed", skill_name="ValidateInput", metadata={"status": "failed"})
             await run_store.update_run(
                 run_id, status="failed", completed_at=datetime.now(timezone.utc)
             )
+            await emit_metric("run_completed", metadata={"status": "failed"})
             return
 
         await emit(
@@ -91,11 +116,13 @@ async def run_orchestrator(
             f"Tenant '{tenant.name}' is active with Drive folder configured.",
             confidence=1.0,
         )
+        await emit_metric("skill_completed", skill_name="ValidateInput", metadata={"status": "completed"})
 
         # Small delay so WS clients can see each step
         await asyncio.sleep(0.3)
 
         # --- Skill B: RetrieveDocs ---
+        await emit_metric("skill_started", skill_name="RetrieveDocs")
         await emit("RetrieveDocs", "thinking", "Locating documents folder...")
 
         root_folder_id = drive_config.root_folder_id
@@ -125,6 +152,7 @@ async def run_orchestrator(
             )
 
             if tokens:
+                await emit_metric("tool_called", skill_name="RetrieveDocs", metadata={"tool": "drive_search"})
                 found = await drive_provider.search_documents(
                     access_token, docs_folder["id"], tokens, limit=10  # type: ignore[arg-type]
                 )
@@ -137,17 +165,21 @@ async def run_orchestrator(
                 f"Found {doc_count} document(s) in Drive.",
                 metadata={"doc_count": doc_count, "sources": sources},
             )
+            await emit_metric("skill_completed", skill_name="RetrieveDocs", metadata={"status": "completed", "doc_count": doc_count})
         except GoogleDriveError as exc:
             await emit(
                 "RetrieveDocs",
                 "error",
                 f"Drive search failed: {exc}",
             )
+            await emit_metric("tool_failed", skill_name="RetrieveDocs", metadata={"error": str(exc)})
+            await emit_metric("skill_completed", skill_name="RetrieveDocs", metadata={"status": "failed"})
             # Continue with zero docs instead of failing the whole run
 
         await asyncio.sleep(0.3)
 
         # --- Skill C: SynthesizeResolution ---
+        await emit_metric("skill_started", skill_name="SynthesizeResolution")
         await emit(
             "SynthesizeResolution",
             "thinking",
@@ -166,6 +198,7 @@ async def run_orchestrator(
                 "Calling Claude synthesis...",
                 metadata={"doc_count": doc_count},
             )
+            await emit_metric("tool_called", skill_name="SynthesizeResolution", metadata={"tool": "claude_synthesis"})
 
             claude_result = await synthesize_resolution(
                 title=work_object.title,
@@ -201,6 +234,7 @@ async def run_orchestrator(
                 "error",
                 f"Claude unavailable, using fallback: {exc}",
             )
+            await emit_metric("tool_failed", skill_name="SynthesizeResolution", metadata={"error": str(exc), "fallback": True})
 
             # Deterministic fallback
             confidence = 0.55 if doc_count > 0 else 0.2
@@ -232,6 +266,7 @@ async def run_orchestrator(
             confidence=confidence,
             metadata={"step_count": len(steps), "fallback": used_fallback},
         )
+        await emit_metric("skill_completed", skill_name="SynthesizeResolution", metadata={"status": "completed", "fallback": used_fallback})
 
         await asyncio.sleep(0.3)
 
@@ -241,7 +276,11 @@ async def run_orchestrator(
             snow_config = await snow_config_store.get_by_tenant(tenant_id)
         will_writeback = snow_config is not None
 
+        # Determine terminal status
+        terminal_status = "fallback_completed" if used_fallback else "completed"
+
         # --- Skill D: RecordOutcome ---
+        await emit_metric("skill_started", skill_name="RecordOutcome")
         await emit("RecordOutcome", "thinking", "Recording run outcome...")
 
         result = {
@@ -257,7 +296,7 @@ async def run_orchestrator(
         else:
             await run_store.update_run(
                 run_id,
-                status="completed",
+                status=terminal_status,
                 completed_at=datetime.now(timezone.utc),
                 result=result,
             )
@@ -268,10 +307,12 @@ async def run_orchestrator(
             "Run completed and outcome recorded.",
             confidence=confidence,
         )
+        await emit_metric("skill_completed", skill_name="RecordOutcome", metadata={"status": "completed"})
 
         # --- Skill E: Writeback (conditional — ServiceNow only) ---
         if will_writeback:
             await asyncio.sleep(0.3)
+            await emit_metric("skill_started", skill_name="Writeback")
             await emit("Writeback", "thinking", "Writing resolution back to ServiceNow...")
 
             writeback_error: str | None = None
@@ -286,6 +327,7 @@ async def run_orchestrator(
                     f"Patching incident {sys_id} with work notes...",
                     metadata={"sys_id": sys_id},
                 )
+                await emit_metric("tool_called", skill_name="Writeback", metadata={"tool": "servicenow_patch", "sys_id": sys_id})
                 await snow_provider.update_work_notes(
                     instance_url=snow_config.instance_url,
                     username=snow_config.username,
@@ -295,13 +337,15 @@ async def run_orchestrator(
                 )
             except ServiceNowError as exc:
                 writeback_error = str(exc)
+                await emit_metric("tool_failed", skill_name="Writeback", metadata={"error": str(exc)})
             except Exception as exc:
                 writeback_error = str(exc)
+                await emit_metric("tool_failed", skill_name="Writeback", metadata={"error": str(exc)})
 
             # Set terminal status BEFORE emitting the terminal event
             await run_store.update_run(
                 run_id,
-                status="completed",
+                status=terminal_status,
                 completed_at=datetime.now(timezone.utc),
             )
 
@@ -317,18 +361,24 @@ async def run_orchestrator(
                     "Resolution written back to ServiceNow.",
                     confidence=confidence,
                 )
+                await emit_metric("skill_completed", skill_name="Writeback", metadata={"status": "completed"})
             else:
                 await emit(
                     "Writeback",
                     "error",
                     f"ServiceNow writeback failed: {writeback_error}",
                 )
+                await emit_metric("skill_completed", skill_name="Writeback", metadata={"status": "failed"})
+
+        # Emit run_completed metric
+        await emit_metric("run_completed", metadata={"status": terminal_status, "fallback": used_fallback, "confidence": confidence})
 
     except Exception as exc:
         await emit("Orchestrator", "error", f"Unexpected error: {exc}")
         await run_store.update_run(
             run_id, status="failed", completed_at=datetime.now(timezone.utc)
         )
+        await emit_metric("run_completed", metadata={"status": "failed", "error": str(exc)})
 
 
 def _tokenize(work_object: WorkObject) -> list[str]:

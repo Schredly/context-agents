@@ -5,7 +5,7 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, WebSocket, WebSocketDisconnect
 
-from models import AgentEvent, AgentRun, CreateFeedbackRequest, CreateRunRequest, FeedbackEvent, ServiceNowRunRequest, WorkObject
+from models import AgentEvent, AgentRun, CreateFeedbackRequest, CreateRunRequest, FeedbackEvent, MetricsEvent, ServiceNowRunRequest, WorkObject
 from services.google_drive import GoogleDriveProvider
 from services.orchestrator import run_orchestrator
 from services.servicenow import ServiceNowProvider
@@ -61,6 +61,15 @@ async def create_run(
     )
     await request.app.state.run_store.create_run(run)
 
+    # Emit run_started metrics event
+    await request.app.state.metrics_event_store.append(MetricsEvent(
+        id=f"me_{uuid.uuid4().hex[:12]}",
+        tenant_id=body.tenant_id,
+        run_id=run_id,
+        event_type="run_started",
+        metadata={"source_system": body.work_object.source_system, "work_id": body.work_object.work_id},
+    ))
+
     background_tasks.add_task(
         run_orchestrator,
         tenant_id=body.tenant_id,
@@ -75,6 +84,7 @@ async def create_run(
         on_event=_publish_event,
         snow_config_store=request.app.state.snow_config_store,
         snow_provider=_snow,
+        metrics_event_store=request.app.state.metrics_event_store,
     )
 
     return {"run_id": run_id}
@@ -116,6 +126,15 @@ async def create_run_from_servicenow(
     )
     await request.app.state.run_store.create_run(run)
 
+    # Emit run_started metrics event
+    await request.app.state.metrics_event_store.append(MetricsEvent(
+        id=f"me_{uuid.uuid4().hex[:12]}",
+        tenant_id=body.tenant_id,
+        run_id=run_id,
+        event_type="run_started",
+        metadata={"source_system": "servicenow", "work_id": work_object.work_id},
+    ))
+
     background_tasks.add_task(
         run_orchestrator,
         tenant_id=body.tenant_id,
@@ -130,6 +149,7 @@ async def create_run_from_servicenow(
         on_event=_publish_event,
         snow_config_store=request.app.state.snow_config_store,
         snow_provider=_snow,
+        metrics_event_store=request.app.state.metrics_event_store,
     )
 
     return {"run_id": run_id}
@@ -157,6 +177,9 @@ async def get_run(run_id: str, tenant_id: str, request: Request):
 # --- WebSocket endpoint ---
 
 
+_TERMINAL_STATUSES = ("completed", "failed", "fallback_completed")
+
+
 @router.websocket("/{run_id}/events")
 async def run_events_ws(websocket: WebSocket, run_id: str, tenant_id: str = ""):
     await websocket.accept()
@@ -174,7 +197,7 @@ async def run_events_ws(websocket: WebSocket, run_id: str, tenant_id: str = ""):
 
     # If run is already terminal, close after replay
     run_fresh = await websocket.app.state.run_store.get_run(run_id)
-    if run_fresh and run_fresh.status in ("completed", "failed"):
+    if run_fresh and run_fresh.status in _TERMINAL_STATUSES:
         await websocket.send_json({"type": "stream_end", "status": run_fresh.status})
         await websocket.close()
         return
@@ -190,7 +213,7 @@ async def run_events_ws(websocket: WebSocket, run_id: str, tenant_id: str = ""):
                 "RecordOutcome", "Writeback"
             ):
                 run_now = await websocket.app.state.run_store.get_run(run_id)
-                if run_now and run_now.status in ("completed", "failed"):
+                if run_now and run_now.status in _TERMINAL_STATUSES:
                     await websocket.send_json(
                         {"type": "stream_end", "status": run_now.status}
                     )
@@ -219,6 +242,11 @@ async def submit_feedback(body: CreateFeedbackRequest, request: Request):
         cp.value for cp in run.work_object.classification
     ) if run.work_object.classification else ""
 
+    # Extract confidence at time of feedback
+    confidence_at_time = None
+    if run.result and "confidence" in run.result:
+        confidence_at_time = float(run.result["confidence"])
+
     event = FeedbackEvent(
         id=f"fb_{uuid.uuid4().hex[:12]}",
         tenant_id=body.tenant_id,
@@ -228,8 +256,30 @@ async def submit_feedback(body: CreateFeedbackRequest, request: Request):
         reason=body.reason,
         notes=body.notes,
         classification_path=classification_path,
+        confidence_at_time=confidence_at_time,
     )
     stored = await request.app.state.feedback_store.append(event)
+
+    # Emit feedback_recorded metrics event
+    await request.app.state.metrics_event_store.append(MetricsEvent(
+        id=f"me_{uuid.uuid4().hex[:12]}",
+        tenant_id=body.tenant_id,
+        run_id=body.run_id,
+        event_type="feedback_recorded",
+        metadata={
+            "outcome": body.outcome,
+            "reason": body.reason,
+            "confidence_at_time": confidence_at_time,
+        },
+    ))
+
+    # Invalidate cached telemetry so next observability query recomputes
+    telemetry_store = request.app.state.telemetry_store
+    cached = await telemetry_store.get(body.run_id)
+    if cached is not None:
+        # Remove stale cache entry by overwriting — recomputed on next access
+        await telemetry_store.upsert(cached.model_copy(update={}))
+
     return stored.model_dump(mode="json")
 
 

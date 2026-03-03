@@ -149,7 +149,7 @@ class ServiceNowRunRequest(BaseModel):
 class AgentRun(BaseModel):
     run_id: str
     tenant_id: str
-    status: Literal["queued", "running", "completed", "failed"] = "queued"
+    status: Literal["queued", "running", "completed", "failed", "fallback_completed"] = "queued"
     started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
     work_object: WorkObject
@@ -187,6 +187,7 @@ class FeedbackEvent(BaseModel):
     reason: Literal["resolved", "partial", "wrong-doc", "missing-context", "other"]
     notes: str = ""
     classification_path: str = ""
+    confidence_at_time: Optional[float] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -208,6 +209,27 @@ class MetricsResponse(BaseModel):
     writeback_success_rate: Optional[float] = None
     feedback_count: int
     breakdown_by_classification_path: list[dict[str, Any]]
+
+
+# --- Metrics Event Logging ---
+
+
+class MetricsEvent(BaseModel):
+    id: str
+    tenant_id: str
+    run_id: str
+    event_type: Literal[
+        "run_started",
+        "skill_started",
+        "skill_completed",
+        "tool_called",
+        "tool_failed",
+        "run_completed",
+        "feedback_recorded",
+    ]
+    skill_name: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # --- Telemetry & Observability models ---
@@ -236,7 +258,7 @@ class RunTelemetry(BaseModel):
     classification_path: str
     started_at: datetime
     completed_at: Optional[datetime] = None
-    status: Literal["completed", "failed"]
+    status: Literal["completed", "failed", "fallback_completed"]
     duration_ms: Optional[int] = None
     confidence: Optional[float] = None
     doc_hit: Optional[bool] = None
@@ -261,8 +283,10 @@ class ObservabilitySummaryResponse(BaseModel):
     doc_hit_rate: Optional[float] = None
     fallback_rate: Optional[float] = None
     writeback_success_rate: Optional[float] = None
+    model_latency_avg: Optional[float] = None
     model_mix: list[dict[str, Any]] = Field(default_factory=list)
     top_classification_paths: list[dict[str, Any]] = Field(default_factory=list)
+    confidence_outcome_matrix: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ObservabilityTrendPoint(BaseModel):
