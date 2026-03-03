@@ -1164,4 +1164,43 @@ Replaced the flat event list inside expanded skill cards with a structured execu
 - The `MetricsEvent` store is in-memory and will lose data on restart. It's a diagnostic/audit layer, not critical path.
 - The 7 event types cover the full run lifecycle. The `metadata` field carries context-specific data (error messages, tool names, sys_ids, etc.).
 
-*Next change will be #015.*
+---
+
+## #015 — 2026-03-02 — ServiceNow Round-Trip Validation
+
+**What happened:**
+Added explicit writeback success/failure tracking. Writeback failures now correctly fail the run. Writeback success rate is computed from MetricsEvents instead of inferred from run telemetry. Debug logging added to the ServiceNow provider for integration testing.
+
+**Files modified:**
+
+- `backend/models.py` — Added `"writeback_success"` and `"writeback_failed"` to MetricsEvent `event_type` Literal (now 9 types total).
+
+- `backend/services/servicenow.py`:
+  - Added `import logging` and module-level `logger = logging.getLogger(__name__)`.
+  - `update_work_notes` — Added `tenant_id` keyword argument for debug logging context. Emits `logger.debug` on writeback start (tenant_id, sys_id, url) and success (tenant_id, sys_id, http_status). Emits `logger.error` on failure (tenant_id, sys_id, http_status, error message).
+
+- `backend/services/orchestrator.py` — Writeback section rewritten:
+  - **Writeback failure → run status "failed"**: Previously, writeback errors kept the run as `completed` or `fallback_completed`. Now `run_store.update_run` sets `status="failed"` on writeback error, and `terminal_status` is updated to `"failed"` so the final `run_completed` MetricsEvent reflects the true outcome.
+  - **Explicit MetricsEvents**: Emits `writeback_success` MetricsEvent with `{sys_id, tenant_id}` metadata on success. Emits `writeback_failed` MetricsEvent with `{sys_id, tenant_id, http_status, error_message}` metadata on failure. `http_status` is captured from `ServiceNowError.status_code` (None for non-ServiceNow exceptions).
+  - Passes `tenant_id=tenant_id` to `snow_provider.update_work_notes()` for debug logging.
+  - Extracts `sys_id` before the try block so it's available in both success and failure paths.
+
+- `backend/services/telemetry.py`:
+  - Added `MetricsEvent` to imports.
+  - `aggregate_observability` — Added optional `metrics_events: list[MetricsEvent]` parameter. Writeback success rate computation now prefers MetricsEvents when available: counts `writeback_success` and `writeback_failed` events, computes rate as `success / (success + failed)`. Falls back to the existing RunTelemetry-based computation when no MetricsEvents are provided.
+
+- `backend/routers/admin.py` — `get_observability_summary` now fetches `metrics_event_store.list_for_tenant(tenant_id)` and passes the result to `aggregate_observability` as the `metrics_events` parameter.
+
+**Key design decisions:**
+- **Writeback failure = run failure**: This is a deliberate choice. If the user configured ServiceNow writeback and it fails, the run's value proposition (automated resolution delivery) was not fulfilled. The run status should reflect this.
+- **MetricsEvents as source of truth for writeback rate**: The `writeback_success`/`writeback_failed` events carry richer metadata (sys_id, http_status, error_message) than can be inferred from run status alone. The telemetry fallback path remains for backward compatibility with runs created before this change.
+- **Debug logging is opt-in**: Uses Python's `logging` module at DEBUG level. No output by default — enable with `logging.basicConfig(level=logging.DEBUG)` or a logging config for integration tests.
+- **`tenant_id` on update_work_notes is keyword-only**: Backward compatible — existing callers that don't pass it get an empty string default, and logging still works.
+
+**What GPT should know for next steps:**
+- MetricsEvent now has 9 event types: `run_started`, `skill_started`, `skill_completed`, `tool_called`, `tool_failed`, `run_completed`, `feedback_recorded`, `writeback_success`, `writeback_failed`.
+- Runs with writeback failures now have `status="failed"`. The frontend should handle this case in RunsPage if it shows ServiceNow-sourced runs.
+- The `writeback_failed` MetricsEvent metadata includes `http_status` (int or None) and `error_message` (str) — useful for debugging integration issues.
+- The ServiceNow provider now logs at DEBUG level. Set `logging.getLogger("services.servicenow").setLevel(logging.DEBUG)` to see writeback traffic.
+
+*Next change will be #016.*
