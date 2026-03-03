@@ -1038,4 +1038,71 @@ Replaced the flat event list inside expanded skill cards with a structured execu
 - The `ObservabilityTrendsResponse` model supports returning 7d and 30d independently or together. The `?window=7` and `?window=30` query params control which is returned.
 - No frontend changes were made. The next sprint could add an observability dashboard page consuming these endpoints.
 
-*Next change will be #013.*
+---
+
+## #013 — 2026-03-02 — Integrate Observability Page (Admin UI)
+
+**What happened:**
+- Added a new Observability page at `/admin/observability` consuming the three backend observability endpoints from sprint #012.
+- Added sidebar navigation item with `BarChart3` icon.
+- Added route entry in `routes.tsx`.
+- Added observability types and 3 API functions to `api.ts`.
+- Strictly frontend-only — no backend changes.
+
+**Files created:**
+- `src/app/pages/ObservabilityPage.tsx` — Full observability dashboard page with 5 sections:
+  - **Section 1 — Impact Overview**: 4 KPI cards in responsive grid (Total Runs, Avg Confidence, Avg Resolution Time, Writeback Success). Each card has large number, optional sparkline from trend data, and % change vs previous period computed from first-half/second-half trend averages.
+  - **Section 2 — Quality Signals**: Two-column layout. Left: Fallback Rate + Doc Hit Rate. Right: Avg Duration + P95 Duration. Uses `CompactMetric` tiles.
+  - **Section 3 — Model & Outcome Correlation**: 2x2 grid showing High/Low Confidence x Completed/Failed percentages derived from the runs list. Uses `CorrelationCell` with tinted backgrounds (green/red/yellow/blue).
+  - **Section 4 — Top Classification Paths**: Table with path, runs count, success rate, avg confidence. Limited to 5 rows from summary endpoint.
+  - **Section 5 — Recent Errors**: Last 3 failed runs from `/observability/runs` endpoint. Shows timestamp, failed skill badge, and error description in red.
+  - **Loading state**: Skeleton placeholders with `animate-pulse` for KPI cards and quality panels.
+  - **Error state**: Red banner with `AlertCircle` icon.
+  - **Empty state**: Message when no runs exist.
+  - **No-tenant state**: Prompt to select a tenant.
+
+- Sub-components defined inline in ObservabilityPage.tsx:
+  - `Sparkline` — SVG polyline from numeric array, configurable color
+  - `MetricCard` — KPI card with label, large value, optional trend badge, optional sparkline, optional subtext
+  - `MetricCardSkeleton` — Loading placeholder matching MetricCard dimensions
+  - `CompactMetric` — Compact label + large number tile for quality/performance section
+  - `CorrelationCell` — Tinted card with percentage and label for the 2x2 matrix
+
+- Helper functions:
+  - `fmt(n, suffix, decimals)` — Format nullable number with suffix
+  - `fmtMs(ms)` — Format milliseconds as "Xms" or "X.Xs"
+  - `fmtPct(n)` — Format 0-1 ratio as "X.X%"
+  - `trendVal(point, key)` — Type-safe accessor for ObservabilityTrendPoint fields by string key
+  - `computeChange(trendPoints, key)` — Compute % change between first and second half of trend window
+
+**Files modified:**
+- `src/app/routes.tsx` — Added `import { ObservabilityPage }` and route `{ path: 'admin/observability', Component: ObservabilityPage }`.
+
+- `src/app/components/Sidebar.tsx` — Added `BarChart3` to lucide imports. Added `{ name: 'Observability', path: '/admin/observability', icon: BarChart3 }` to navItems between Runs and Settings.
+
+- `src/app/services/api.ts` — Added observability types and functions:
+  - `SkillTelemetryResponse` — per-skill telemetry shape
+  - `RunTelemetryResponse` — per-run telemetry shape with skills array
+  - `ObservabilitySummaryResponse` — aggregate stats shape
+  - `ObservabilityTrendPoint` — daily data point shape
+  - `ObservabilityTrendsResponse` — 7d + 30d trend arrays
+  - `getObservabilitySummary(tenantId)` → GET `/api/admin/{id}/observability/summary`
+  - `getObservabilityTrends(tenantId, window?)` → GET `/api/admin/{id}/observability/trends`
+  - `getObservabilityRuns(tenantId, limit?)` → GET `/api/admin/{id}/observability/runs`
+
+**Key design decisions:**
+- **Date range is client-side filtering** — The `Last 7 days / Last 30 days` dropdown switches between `trends.last_7d` and `trends.last_30d` arrays and between `summary.runs_last_7d` and `summary.runs_last_30d` counts. Both windows are fetched in a single API call (no `?window=` param needed).
+- **Change % computed from trend halves** — The trend change badge splits the trend array at the midpoint and compares the average of the second half to the first half. This gives a meaningful "trending up/down" signal without needing a separate previous-period API call.
+- **Correlation matrix derived from runs** — The 2x2 confidence/outcome matrix is computed from the `/observability/runs` response. Confidence >= 0.7 is "high", status determines completed/failed. This avoids needing a dedicated backend endpoint.
+- **No chart library** — Sparklines are pure SVG polylines. No recharts/chart.js/d3 dependency added.
+- **Inline sub-components** — All sub-components (Sparkline, MetricCard, etc.) are defined in ObservabilityPage.tsx. They can be extracted if reused elsewhere.
+- **Type-safe trend access** — `trendVal()` switch function avoids TypeScript index signature issues with the `ObservabilityTrendPoint` interface.
+
+**What GPT should know for next steps:**
+- The page is fully functional but shows empty/zero states when no runs exist. To see data, create and complete runs first.
+- The correlation matrix uses run status (completed/failed) not feedback outcome, since feedback is not included in the RunTelemetry response. A future enhancement could add feedback data to the runs endpoint.
+- The sparkline component handles edge cases (< 2 data points returns null, zero range uses 1 to avoid division by zero).
+- Sub-components could be extracted to `src/app/components/observability/` if the page grows or components are reused.
+- The date range dropdown triggers a re-render with different data slices but does NOT re-fetch from the backend.
+
+*Next change will be #014.*
