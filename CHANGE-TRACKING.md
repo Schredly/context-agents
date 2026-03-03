@@ -982,4 +982,60 @@ Replaced the flat event list inside expanded skill cards with a structured execu
 - The `m()` helper is a pattern for safely rendering `Record<string, unknown>` metadata values in JSX — reusable anywhere metadata needs to be displayed.
 - The old flat event list is fully removed. There is no toggle or fallback to the old view.
 
-*Next change will be #012.*
+---
+
+## #012 — 2026-03-02 — Telemetry Extraction + Tenant Observability
+
+**What happened:**
+- Added backend-first telemetry extraction that computes structured per-run and per-skill metrics from existing event/run/feedback data.
+- Created a new service module (`backend/services/telemetry.py`) with 4 pure functions for telemetry computation.
+- Added 3 new admin API endpoints for observability dashboards.
+- No frontend changes — this sprint is backend-only, preparing data for a future observability UI.
+
+**Files modified:**
+- `backend/models.py` — Added 5 new Pydantic models:
+  - `SkillTelemetry` — per-skill metrics (status, duration, tool calls/errors, model, tokens, doc_count, fallback)
+  - `RunTelemetry` — per-run metrics (duration, confidence, doc_hit, writeback, fallback, model, tokens, list of SkillTelemetry)
+  - `ObservabilitySummaryResponse` — aggregate stats (total/completed/failed runs, 7d/30d counts, avg/p95 duration, avg confidence, doc hit rate, fallback rate, writeback success rate, model mix, top classification paths)
+  - `ObservabilityTrendPoint` — daily data point (date, runs, success_rate, avg_confidence, fallback_rate, doc_hit_rate, avg_duration_ms)
+  - `ObservabilityTrendsResponse` — container for 7d and 30d trend arrays
+
+- `backend/store/interface.py` — Added `TelemetryStore` ABC with 3 methods:
+  - `upsert(run_telemetry)` — insert or update by run_id
+  - `get(run_id)` — retrieve cached telemetry
+  - `list_for_tenant(tenant_id)` — all telemetries for a tenant
+
+- `backend/store/memory.py` — Added `InMemoryTelemetryStore` implementing `TelemetryStore` with dict keyed by run_id.
+
+- `backend/store/__init__.py` — Re-exported `TelemetryStore` and `InMemoryTelemetryStore`.
+
+- `backend/main.py` — Wired `app.state.telemetry_store = InMemoryTelemetryStore()`.
+
+- `backend/services/telemetry.py` — **New file.** Pure service module with:
+  - `build_skill_telemetry(skill_id, skill_events)` → `SkillTelemetry` — Determines status (completed/failed/skipped), computes duration from first-to-last event timestamp diff, counts tool_calls and tool_errors, extracts model/latency/tokens/doc_count from latest tool_result metadata, checks for fallback flag.
+  - `build_run_telemetry(run, events, feedback)` → `RunTelemetry` — Groups events by skill_id, builds SkillTelemetry for each (including SKILL_ORDER for canonical ordering), computes run-level duration/confidence/doc_hit/writeback/fallback/model/tokens.
+  - `aggregate_observability(tenant_id, run_telemetries, feedback_map)` → `ObservabilitySummaryResponse` — Computes aggregate stats across all runs: counts, avg/p95 duration, avg confidence, doc hit rate, fallback rate, writeback success rate, model mix, top 10 classification paths with per-path success rate and avg confidence.
+  - `compute_trends(run_telemetries, window_days, feedback_map)` → `list[ObservabilityTrendPoint]` — Groups runs by date within window, computes daily metrics. Generates entries for all days in window (empty days get runs=0). Success rate uses feedback outcome when available, falls back to run status.
+
+- `backend/routers/admin.py` — Added 3 endpoints + shared helper:
+  - `_build_tenant_telemetries(tenant_id, request)` — Iterates all completed/failed runs for tenant, checks telemetry_store cache first, otherwise builds telemetry on-demand and upserts to cache. Returns `(list[RunTelemetry], dict[str, FeedbackEvent])`.
+  - `GET /api/admin/{tenant_id}/observability/summary` → `ObservabilitySummaryResponse`
+  - `GET /api/admin/{tenant_id}/observability/trends?window=7|30` → `ObservabilityTrendsResponse` (defaults to both windows)
+  - `GET /api/admin/{tenant_id}/observability/runs?limit=50` → `list[RunTelemetry]` (newest first, limit 1-500)
+
+**Key design decisions:**
+- **On-demand computation, no background jobs** — Telemetry is computed when the observability endpoints are called, not on a schedule. This keeps the system simple and stateless. The telemetry_store acts as a cache to avoid recomputing for the same run.
+- **SKILL_ORDER canonical ordering** — Skills appear in pipeline order (ValidateInput → RetrieveDocs → SynthesizeResolution → RecordOutcome → Writeback) regardless of the order events arrived. Extra skills not in the canonical list appear at the end.
+- **Feedback-aware success rate** — Both `aggregate_observability` and `compute_trends` prefer feedback outcome over run status when computing success rates. If a user marked a completed run as "fail", it counts as a failure.
+- **P95 duration uses sorted array** — `math.ceil(0.95 * n) - 1` index on sorted durations. Simple and correct for the expected data sizes.
+- **Telemetry cache is write-once** — Once a run's telemetry is computed and cached, it's returned from cache on subsequent requests. This means if feedback is submitted after the first observability query, the cached RunTelemetry won't reflect the feedback change (but the feedback_map passed to aggregation functions will).
+- **Pure functions in service module** — `telemetry.py` has no side effects and no store dependencies. All data is passed in as arguments, making the functions easy to test.
+
+**What GPT should know for next steps:**
+- The 3 observability endpoints are ready for a frontend dashboard. The summary endpoint provides all the data needed for a KPI panel, trends provides daily time series for charts, and runs provides the detail table.
+- The `_build_tenant_telemetries` helper does N+1 queries (one per run for events + feedback). This is fine for the in-memory store but would need optimization (batch queries) for a database-backed store.
+- The telemetry cache in `InMemoryTelemetryStore` never invalidates. If a run's events change after telemetry is cached (unlikely but possible), the cached version is stale. For MVP this is acceptable.
+- The `ObservabilityTrendsResponse` model supports returning 7d and 30d independently or together. The `?window=7` and `?window=30` query params control which is returned.
+- No frontend changes were made. The next sprint could add an observability dashboard page consuming these endpoints.
+
+*Next change will be #013.*
