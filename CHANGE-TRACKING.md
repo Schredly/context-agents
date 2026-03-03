@@ -1203,4 +1203,73 @@ Added explicit writeback success/failure tracking. Writeback failures now correc
 - The `writeback_failed` MetricsEvent metadata includes `http_status` (int or None) and `error_message` (str) — useful for debugging integration issues.
 - The ServiceNow provider now logs at DEBUG level. Set `logging.getLogger("services.servicenow").setLevel(logging.DEBUG)` to see writeback traffic.
 
-*Next change will be #016.*
+---
+
+## #016 — 2026-03-02 — Controlled Integration Hardening + Failure Injection
+
+**What happened:**
+Added environment-based controlled failure injection for integration testing, a new admin diagnostics endpoint, and improved logging across all service providers. This sprint is backend-only and diagnostic-focused.
+
+**Files modified:**
+
+- `backend/models.py` — Added 2 new models:
+  - `DiagnosticFailureEvent(run_id, event_type, skill_name, error_message, timestamp)` — Serialization model for recent failure events in the diagnostics response.
+  - `IntegrationDiagnosticsResponse(drive_configured, claude_configured, servicenow_configured, last_writeback_status, last_writeback_error, recent_failure_events)` — Response model for the integration diagnostics endpoint.
+
+- `backend/services/google_drive.py`:
+  - Added `import logging, os` and module-level `logger`.
+  - Added `injected: bool = False` attribute to `GoogleDriveError.__init__`.
+  - `search_documents` — Checks `FAIL_DRIVE_SEARCH` env var at entry. If `"true"`, logs `"[INJECTED FAILURE] Drive search_documents: folder_id=..."` at WARNING level and raises `GoogleDriveError(503)` with `injected=True`.
+  - Added error logging on real Drive search failures with `folder_id` and `http_status`.
+
+- `backend/services/claude_client.py`:
+  - Added `import logging` and module-level `logger`.
+  - Added `injected: bool = False` attribute to `ClaudeClientError.__init__`.
+  - `synthesize_resolution` — Checks `FAIL_CLAUDE_SYNTHESIS` env var before API key check. If `"true"`, logs `"[INJECTED FAILURE] Claude synthesis: model=..."` at WARNING level and raises `ClaudeClientError` with `injected=True`.
+  - Added error logging on real Claude API failures with `model` and `http_status`.
+
+- `backend/services/servicenow.py`:
+  - Added `import os`.
+  - Added `injected: bool = False` attribute to `ServiceNowError.__init__`.
+  - `update_work_notes` — Checks `FAIL_SERVICENOW_WRITEBACK` env var before making HTTP call. If `"true"`, logs `"[INJECTED FAILURE] ServiceNow writeback: tenant_id=... sys_id=..."` at WARNING level and raises `ServiceNowError(503)` with `injected=True`.
+
+- `backend/services/orchestrator.py`:
+  - Reads `SLOW_DOWN_MS` env var once at the start of `run_orchestrator`. If > 0, adds `asyncio.sleep(slow_down_ms / 1000)` inside each skill execution after the "thinking" emit via `_injected_delay()` helper.
+  - All catch blocks for `GoogleDriveError`, `ClaudeClientError`, and `ServiceNowError` now check `getattr(exc, 'injected', False)` and:
+    - Add `"injected": True` to `tool_failed` MetricsEvent metadata when applicable.
+    - Add `"injected": True` to `writeback_failed` MetricsEvent metadata when applicable.
+    - Append `" [INJECTED]"` to agent event summaries for visibility in WebSocket stream.
+  - Tracks `writeback_injected` bool separately for the writeback section.
+
+- `backend/routers/admin.py`:
+  - Added `import os`.
+  - Added `DiagnosticFailureEvent` and `IntegrationDiagnosticsResponse` to model imports.
+  - New endpoint: `GET /api/admin/{tenant_id}/integration-diagnostics`:
+    - `drive_configured`: checks drive_config_store for root_folder_id.
+    - `claude_configured`: checks `CLAUDE_API_KEY` env var.
+    - `servicenow_configured`: checks snow_config_store for tenant.
+    - `last_writeback_status`: most recent `writeback_success` or `writeback_failed` MetricsEvent → `"success"` or `"failed"`.
+    - `last_writeback_error`: error_message from most recent `writeback_failed` event metadata.
+    - `recent_failure_events`: last 10 `tool_failed` + `writeback_failed` MetricsEvents with run_id, event_type, skill_name, error_message, timestamp.
+
+**Environment variables for failure injection:**
+- `FAIL_DRIVE_SEARCH=true` — Drive `search_documents` throws controlled `GoogleDriveError(503)`.
+- `FAIL_CLAUDE_SYNTHESIS=true` — `synthesize_resolution` throws controlled `ClaudeClientError` before API call.
+- `FAIL_SERVICENOW_WRITEBACK=true` — `update_work_notes` throws controlled `ServiceNowError(503)` before HTTP call.
+- `SLOW_DOWN_MS=<integer>` — Adds artificial delay (ms) inside each skill execution.
+
+**Key design decisions:**
+- **`injected` attribute on exception instances**: Each provider's error class has an `injected: bool = False` default attribute. Injection code sets it to `True` on the raised instance. The orchestrator reads it with `getattr(exc, 'injected', False)` to propagate the flag into MetricsEvent metadata without modifying existing exception interfaces.
+- **Env var checked at call time, not import time**: Each injection check reads `os.environ.get(...)` at the moment of the call, so env vars can be toggled between runs without restarting the server.
+- **SLOW_DOWN_MS read once per run**: Read at the start of `run_orchestrator` and applied uniformly to all skills in that run via `_injected_delay()`.
+- **Diagnostics endpoint uses existing stores only**: No new store interfaces or implementations. Queries `drive_config_store`, `snow_config_store`, and `metrics_event_store` directly.
+- **Observability schema unchanged**: No modifications to `ObservabilitySummaryResponse`, `ObservabilityTrendsResponse`, or any telemetry models. Injected failures flow through existing MetricsEvent and telemetry pipelines naturally.
+
+**What GPT should know for next steps:**
+- All three failure injection env vars default to off (unset or not `"true"`). Setting them requires no server restart.
+- Injected failures are visible in: MetricsEvents (metadata.injected=true), agent events (summary includes " [INJECTED]"), and provider logs (prefixed with "[INJECTED FAILURE]").
+- The diagnostics endpoint is useful for integration testing — check `GET /api/admin/{tenant_id}/integration-diagnostics` to see which integrations are configured and recent failures.
+- SLOW_DOWN_MS affects all skills uniformly — use it to simulate slow processing for frontend/WebSocket testing.
+- The `injected` attribute on exception classes is backward compatible — existing code that catches these exceptions without checking `.injected` will work unchanged.
+
+*Next change will be #017.*
