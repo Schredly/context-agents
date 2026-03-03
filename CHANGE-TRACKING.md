@@ -923,4 +923,63 @@ Applied a styling-only polish pass to the RunsPage to align with the reference d
 - The result panel has a more structured hierarchy: heading → evidence line → summary → confidence → steps → sources → run ID.
 - The feedback form button is now green (`emerald-700`) while the "Start Run" button remains blue (`blue-600`) — this distinguishes creation from confirmation actions.
 
-*Next change will be #011.*
+---
+
+## #011 — 2026-03-02 — Structured Agent Trace UI
+
+**What happened:**
+Replaced the flat event list inside expanded skill cards with a structured execution trace renderer. When a skill is expanded in the timeline, events are now grouped by execution phase (Intent, Tool Call, Result, Error, Completion) instead of displayed as a raw chronological list. This is a UI-only enhancement — no backend, API, type, or data contract changes.
+
+**Files modified:**
+
+- `src/app/pages/RunsPage.tsx` — Added `SkillTrace` component and replaced the expanded skill content:
+
+  - **`SkillTrace` component** — New inline component that receives a skill's events array and renders structured sections:
+
+    - **Intent** — Shows the first `thinking` event's summary. Styled `text-sm text-gray-500` with a `text-xs font-medium text-gray-400` label.
+
+    - **Tool Call** — Shows the `tool_call` event summary inside a `rounded-md bg-gray-50 border border-gray-200 p-3` card. Renders metadata below the summary when available:
+      - `model` — e.g. "Model: claude-sonnet-4-20250514"
+      - `latency_ms` — e.g. "342ms"
+      - `tool_name` — e.g. "Tool: search_documents"
+      - All metadata rendered as `text-xs text-gray-400` in a flex-wrap row.
+
+    - **Result** — Shows the `tool_result` event summary as `text-sm text-gray-600`. Renders metadata below when available:
+      - `confidence` — from the event's `confidence` field, rendered as percentage
+      - `doc_count` — from metadata
+      - `model` — from metadata
+      - `latency_ms` — from metadata
+
+    - **Error** — Shows the `error` event summary inside a `rounded-md bg-red-50 border border-red-200 p-3` card. Error text styled `text-sm text-red-600`.
+
+    - **Completion** — Two optional indicators:
+      - If `metadata.fallback === true`: shows "Fallback used" in `text-xs text-amber-600`
+      - If timestamps exist on first and last events and diff > 0: shows "Completed in {N}ms" in `text-xs text-gray-400`
+
+  - **`m()` helper** — Type-safe metadata accessor: `m(obj, key)` returns `String(value)` if the key exists and is non-null, otherwise `undefined`. Avoids TypeScript `unknown` → `ReactNode` errors when rendering metadata values inline.
+
+  - **Expanded skill panel** — The old content (`<ul>` of raw events with `event_type` labels) replaced with `<SkillTrace events={skill.events} />`. Panel retains `bg-gray-50` background, adds `border-t border-gray-100` separator and `pt-2` top padding.
+
+  - **Sections use `space-y-2`** between trace sections for compact vertical rhythm.
+
+**What was NOT changed:**
+- Timeline layout, skill card structure, toggle behavior
+- Badge styling, result panel, button styling
+- Backend code, API calls, types, event schema
+- No new dependencies added
+- No new hex colors — all use existing Tailwind tokens
+
+**Key design decisions:**
+- **Phase grouping over chronological list** — Events are grouped by `event_type` rather than listed in order. This surfaces the important information (what the skill intended, what tool it called, what result it got) without requiring the user to scan through raw event logs.
+- **Metadata is opportunistic** — Each section only renders metadata fields that are actually present. Skills that don't emit `latency_ms` or `model` just show the summary. This handles the variation between skills (ValidateInput has no tool call, SynthesizeResolution has model/latency metadata).
+- **No scrolling inside skill panel** — The trace content is compact enough to render inline without overflow. Each section is 1-3 lines maximum.
+- **Fallback indicator uses amber** — Not red (it's not an error) and not gray (it should be noticeable). Amber signals "degraded but functional" which accurately describes the fallback synthesis path.
+- **Duration from timestamp diff** — Calculated as `last_event.timestamp - first_event.timestamp` in milliseconds. Only shown when diff > 0 to avoid displaying "0ms" for skills that complete instantly.
+
+**What GPT should know for next steps:**
+- The `SkillTrace` component is defined inline in `RunsPage.tsx` — it could be extracted to its own file if the page grows further.
+- The trace renderer uses `find()` to pick the first event of each type. If a skill emits multiple `tool_call` events, only the first is shown. This is acceptable for the current 4-skill chain but may need adjustment if skills become multi-step.
+- The `m()` helper is a pattern for safely rendering `Record<string, unknown>` metadata values in JSX — reusable anywhere metadata needs to be displayed.
+- The old flat event list is fully removed. There is no toggle or fallback to the old view.
+
+*Next change will be #012.*
