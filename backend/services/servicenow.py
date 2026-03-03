@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 import httpx
 
@@ -12,6 +13,7 @@ class ServiceNowError(Exception):
     def __init__(self, status_code: int, message: str):
         super().__init__(message)
         self.status_code = status_code
+        self.injected: bool = False
 
 
 class ServiceNowProvider:
@@ -28,6 +30,16 @@ class ServiceNowProvider:
         tenant_id: str = "",
     ) -> None:
         """PATCH /api/now/table/incident/{sys_id} to append work_notes."""
+        # --- Failure injection ---
+        if os.environ.get("FAIL_SERVICENOW_WRITEBACK", "").lower() == "true":
+            logger.warning(
+                "[INJECTED FAILURE] ServiceNow writeback: tenant_id=%s sys_id=%s",
+                tenant_id, sys_id,
+            )
+            exc = ServiceNowError(503, "[INJECTED] ServiceNow writeback failure")
+            exc.injected = True
+            raise exc
+
         url = f"{instance_url.rstrip('/')}/api/now/table/incident/{sys_id}"
         logger.debug(
             "Writeback starting: tenant_id=%s sys_id=%s url=%s",

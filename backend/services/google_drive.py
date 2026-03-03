@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import uuid
 
 import httpx
@@ -9,11 +11,14 @@ DRIVE_API = "https://www.googleapis.com/drive/v3"
 UPLOAD_API = "https://www.googleapis.com/upload/drive/v3"
 FOLDER_MIME = "application/vnd.google-apps.folder"
 
+logger = logging.getLogger(__name__)
+
 
 class GoogleDriveError(Exception):
     def __init__(self, status_code: int, message: str):
         super().__init__(message)
         self.status_code = status_code
+        self.injected: bool = False
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -169,6 +174,16 @@ class GoogleDriveProvider:
         limit: int = 10,
     ) -> list[dict[str, str]]:
         """Search for files in a folder whose name matches any token."""
+        # --- Failure injection ---
+        if os.environ.get("FAIL_DRIVE_SEARCH", "").lower() == "true":
+            logger.warning(
+                "[INJECTED FAILURE] Drive search_documents: folder_id=%s",
+                folder_id,
+            )
+            exc = GoogleDriveError(503, "[INJECTED] Drive search failure")
+            exc.injected = True
+            raise exc
+
         if not tokens:
             return []
         name_clauses = " or ".join(f"name contains '{t}'" for t in tokens[:8])
@@ -191,6 +206,10 @@ class GoogleDriveProvider:
         if not res.is_success:
             body = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
             msg = body.get("error", {}).get("message", f"Search failed ({res.status_code})")
+            logger.error(
+                "Drive search failed: folder_id=%s http_status=%d error=%s",
+                folder_id, res.status_code, msg,
+            )
             raise GoogleDriveError(res.status_code, msg)
         files = res.json().get("files", [])
         return [

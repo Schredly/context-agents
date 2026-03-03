@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import uuid
 from datetime import datetime, timezone
@@ -29,6 +30,10 @@ async def run_orchestrator(
     metrics_event_store: Any = None,
 ) -> None:
     """Execute the skill chain for a run. Updates run status and emits events."""
+
+    # Read injection / slow-down config once
+    slow_down_ms = int(os.environ.get("SLOW_DOWN_MS", "0"))
+    slow_down_s = slow_down_ms / 1000 if slow_down_ms > 0 else 0
 
     async def emit(
         skill_id: str,
@@ -66,12 +71,17 @@ async def run_orchestrator(
             metadata=metadata,
         ))
 
+    async def _injected_delay() -> None:
+        if slow_down_s > 0:
+            await asyncio.sleep(slow_down_s)
+
     await run_store.update_run(run_id, status="running")
 
     try:
         # --- Skill A: ValidateInput ---
         await emit_metric("skill_started", skill_name="ValidateInput")
         await emit("ValidateInput", "thinking", "Validating tenant and configuration...")
+        await _injected_delay()
 
         tenant = await tenant_store.get(tenant_id)
         if tenant is None:
@@ -124,6 +134,7 @@ async def run_orchestrator(
         # --- Skill B: RetrieveDocs ---
         await emit_metric("skill_started", skill_name="RetrieveDocs")
         await emit("RetrieveDocs", "thinking", "Locating documents folder...")
+        await _injected_delay()
 
         root_folder_id = drive_config.root_folder_id
         sources: list[dict[str, str]] = []
@@ -167,12 +178,16 @@ async def run_orchestrator(
             )
             await emit_metric("skill_completed", skill_name="RetrieveDocs", metadata={"status": "completed", "doc_count": doc_count})
         except GoogleDriveError as exc:
+            injected = getattr(exc, "injected", False)
             await emit(
                 "RetrieveDocs",
                 "error",
-                f"Drive search failed: {exc}",
+                f"Drive search failed: {exc}" + (" [INJECTED]" if injected else ""),
             )
-            await emit_metric("tool_failed", skill_name="RetrieveDocs", metadata={"error": str(exc)})
+            fail_meta: dict[str, Any] = {"error": str(exc)}
+            if injected:
+                fail_meta["injected"] = True
+            await emit_metric("tool_failed", skill_name="RetrieveDocs", metadata=fail_meta)
             await emit_metric("skill_completed", skill_name="RetrieveDocs", metadata={"status": "failed"})
             # Continue with zero docs instead of failing the whole run
 
@@ -185,6 +200,7 @@ async def run_orchestrator(
             "thinking",
             "Synthesizing resolution from available sources...",
         )
+        await _injected_delay()
 
         classification_pairs = [
             {"name": p.name, "value": p.value} for p in work_object.classification
@@ -228,13 +244,17 @@ async def run_orchestrator(
             )
 
         except ClaudeClientError as exc:
+            injected = getattr(exc, "injected", False)
             used_fallback = True
             await emit(
                 "SynthesizeResolution",
                 "error",
-                f"Claude unavailable, using fallback: {exc}",
+                f"Claude unavailable, using fallback: {exc}" + (" [INJECTED]" if injected else ""),
             )
-            await emit_metric("tool_failed", skill_name="SynthesizeResolution", metadata={"error": str(exc), "fallback": True})
+            fail_meta_claude: dict[str, Any] = {"error": str(exc), "fallback": True}
+            if injected:
+                fail_meta_claude["injected"] = True
+            await emit_metric("tool_failed", skill_name="SynthesizeResolution", metadata=fail_meta_claude)
 
             # Deterministic fallback
             confidence = 0.55 if doc_count > 0 else 0.2
@@ -282,6 +302,7 @@ async def run_orchestrator(
         # --- Skill D: RecordOutcome ---
         await emit_metric("skill_started", skill_name="RecordOutcome")
         await emit("RecordOutcome", "thinking", "Recording run outcome...")
+        await _injected_delay()
 
         result = {
             "summary": summary_text,
@@ -314,9 +335,11 @@ async def run_orchestrator(
             await asyncio.sleep(0.3)
             await emit_metric("skill_started", skill_name="Writeback")
             await emit("Writeback", "thinking", "Writing resolution back to ServiceNow...")
+            await _injected_delay()
 
             writeback_error: str | None = None
             writeback_http_status: int | None = None
+            writeback_injected: bool = False
             sys_id = (work_object.metadata or {}).get("sys_id", "")
             try:
                 notes = format_work_notes(
@@ -340,7 +363,11 @@ async def run_orchestrator(
             except ServiceNowError as exc:
                 writeback_error = str(exc)
                 writeback_http_status = exc.status_code
-                await emit_metric("tool_failed", skill_name="Writeback", metadata={"error": str(exc)})
+                writeback_injected = getattr(exc, "injected", False)
+                fail_meta_wb: dict[str, Any] = {"error": str(exc)}
+                if writeback_injected:
+                    fail_meta_wb["injected"] = True
+                await emit_metric("tool_failed", skill_name="Writeback", metadata=fail_meta_wb)
             except Exception as exc:
                 writeback_error = str(exc)
                 await emit_metric("tool_failed", skill_name="Writeback", metadata={"error": str(exc)})
@@ -378,15 +405,19 @@ async def run_orchestrator(
                 await emit(
                     "Writeback",
                     "error",
-                    f"ServiceNow writeback failed: {writeback_error}",
+                    f"ServiceNow writeback failed: {writeback_error}"
+                    + (" [INJECTED]" if writeback_injected else ""),
                 )
                 await emit_metric("skill_completed", skill_name="Writeback", metadata={"status": "failed"})
-                await emit_metric("writeback_failed", skill_name="Writeback", metadata={
+                wb_failed_meta: dict[str, Any] = {
                     "sys_id": sys_id,
                     "tenant_id": tenant_id,
                     "http_status": writeback_http_status,
                     "error_message": writeback_error,
-                })
+                }
+                if writeback_injected:
+                    wb_failed_meta["injected"] = True
+                await emit_metric("writeback_failed", skill_name="Writeback", metadata=wb_failed_meta)
                 terminal_status = "failed"
 
         # Emit run_completed metric

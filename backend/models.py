@@ -291,6 +291,23 @@ class ObservabilitySummaryResponse(BaseModel):
     confidence_outcome_matrix: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class DiagnosticFailureEvent(BaseModel):
+    run_id: str
+    event_type: str
+    skill_name: str
+    error_message: str
+    timestamp: str
+
+
+class IntegrationDiagnosticsResponse(BaseModel):
+    drive_configured: bool
+    claude_configured: bool
+    servicenow_configured: bool
+    last_writeback_status: Optional[str] = None
+    last_writeback_error: Optional[str] = None
+    recent_failure_events: list[DiagnosticFailureEvent] = Field(default_factory=list)
+
+
 class ObservabilityTrendPoint(BaseModel):
     date: str
     runs: int

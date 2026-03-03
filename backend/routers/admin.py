@@ -1,3 +1,4 @@
+import os
 import secrets
 
 from fastapi import APIRouter, Query, Request, HTTPException
@@ -8,7 +9,9 @@ from typing import Optional
 from models import (
     ActivateResponse,
     ClassificationSchema,
+    DiagnosticFailureEvent,
     GoogleDriveConfig,
+    IntegrationDiagnosticsResponse,
     MetricsResponse,
     ObservabilitySummaryResponse,
     ObservabilityTrendsResponse,
@@ -281,6 +284,67 @@ async def get_metrics(tenant_id: str, request: Request):
         writeback_success_rate=writeback_success_rate,
         feedback_count=feedback_count,
         breakdown_by_classification_path=breakdown,
+    )
+
+
+# --- Integration Diagnostics ---
+
+
+@router.get("/integration-diagnostics", response_model=IntegrationDiagnosticsResponse)
+async def get_integration_diagnostics(tenant_id: str, request: Request):
+    await _require_tenant(tenant_id, request)
+
+    # drive_configured
+    drive_config = await request.app.state.drive_config_store.get_by_tenant(tenant_id)
+    drive_configured = drive_config is not None and bool(drive_config.root_folder_id)
+
+    # claude_configured
+    claude_configured = bool(os.environ.get("CLAUDE_API_KEY", ""))
+
+    # servicenow_configured
+    snow_config = await request.app.state.snow_config_store.get_by_tenant(tenant_id)
+    servicenow_configured = snow_config is not None
+
+    # last_writeback_status and last_writeback_error from MetricsEvents
+    metrics_events = await request.app.state.metrics_event_store.list_for_tenant(tenant_id)
+
+    wb_events = [e for e in metrics_events if e.event_type in ("writeback_success", "writeback_failed")]
+    wb_events.sort(key=lambda e: e.created_at, reverse=True)
+
+    last_writeback_status: str | None = None
+    last_writeback_error: str | None = None
+    if wb_events:
+        latest_wb = wb_events[0]
+        if latest_wb.event_type == "writeback_success":
+            last_writeback_status = "success"
+        else:
+            last_writeback_status = "failed"
+            last_writeback_error = (latest_wb.metadata or {}).get("error_message")
+
+    # recent_failure_events — tool_failed and writeback_failed, last 10
+    failure_events = [
+        e for e in metrics_events
+        if e.event_type in ("tool_failed", "writeback_failed")
+    ]
+    failure_events.sort(key=lambda e: e.created_at, reverse=True)
+    recent_failures = [
+        DiagnosticFailureEvent(
+            run_id=e.run_id,
+            event_type=e.event_type,
+            skill_name=e.skill_name or "",
+            error_message=(e.metadata or {}).get("error", (e.metadata or {}).get("error_message", "")),
+            timestamp=e.created_at.isoformat(),
+        )
+        for e in failure_events[:10]
+    ]
+
+    return IntegrationDiagnosticsResponse(
+        drive_configured=drive_configured,
+        claude_configured=claude_configured,
+        servicenow_configured=servicenow_configured,
+        last_writeback_status=last_writeback_status,
+        last_writeback_error=last_writeback_error,
+        recent_failure_events=recent_failures,
     )
 
 

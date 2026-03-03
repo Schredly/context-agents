@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 
@@ -9,6 +10,8 @@ import httpx
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 CLAUDE_TIMEOUT = 30
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
 You are a resolution assistant for an IT service management system. \
@@ -61,7 +64,9 @@ def _build_user_message(
 
 
 class ClaudeClientError(Exception):
-    pass
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.injected: bool = False
 
 
 async def synthesize_resolution(
@@ -75,6 +80,15 @@ async def synthesize_resolution(
 
     Raises ClaudeClientError on failure (caller should fall back to placeholder).
     """
+    # --- Failure injection ---
+    if os.environ.get("FAIL_CLAUDE_SYNTHESIS", "").lower() == "true":
+        logger.warning(
+            "[INJECTED FAILURE] Claude synthesis: model=%s", CLAUDE_MODEL,
+        )
+        exc = ClaudeClientError("[INJECTED] Claude synthesis failure")
+        exc.injected = True
+        raise exc
+
     api_key = os.environ.get("CLAUDE_API_KEY", "")
     if not api_key:
         raise ClaudeClientError("CLAUDE_API_KEY not set")
@@ -109,6 +123,10 @@ async def synthesize_resolution(
             detail = res.json().get("error", {}).get("message", "")
         except Exception:
             pass
+        logger.error(
+            "Claude API failed: model=%s http_status=%d error=%s",
+            CLAUDE_MODEL, res.status_code, detail or res.text[:200],
+        )
         raise ClaudeClientError(
             f"Claude API returned {res.status_code}: {detail or res.text[:200]}"
         )
