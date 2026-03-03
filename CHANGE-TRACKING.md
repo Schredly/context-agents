@@ -1105,4 +1105,63 @@ Replaced the flat event list inside expanded skill cards with a structured execu
 - Sub-components could be extracted to `src/app/components/observability/` if the page grows or components are reused.
 - The date range dropdown triggers a re-render with different data slices but does NOT re-fetch from the backend.
 
-*Next change will be #014.*
+---
+
+## #014 — 2026-03-02 — Outcome & Metrics Instrumentation
+
+**What happened:**
+- Normalized the feedback model with `confidence_at_time` for point-in-time capture.
+- Added `fallback_completed` canonical run state to distinguish fallback synthesis paths.
+- Created lightweight `MetricsEvent` audit trail emitted from orchestrator and route handlers.
+- Enhanced observability summary with `model_latency_avg` and `confidence_outcome_matrix`.
+- Backend-only sprint — no frontend changes.
+
+**Files modified:**
+
+- `backend/models.py`:
+  - `FeedbackEvent` — Added `confidence_at_time: Optional[float] = None` field. Existing `timestamp` serves as `created_at`.
+  - `AgentRun.status` — Extended Literal to include `"fallback_completed"` alongside existing states.
+  - `RunTelemetry.status` — Extended Literal to include `"fallback_completed"`.
+  - `MetricsEvent` — **New model.** Fields: `id`, `tenant_id`, `run_id`, `event_type` (Literal of 7 types), `skill_name` (nullable), `metadata` (json), `created_at`.
+  - `ObservabilitySummaryResponse` — Added `model_latency_avg: Optional[float]` and `confidence_outcome_matrix: list[dict[str, Any]]`.
+
+- `backend/store/interface.py` — Added `MetricsEventStore` ABC with `append`, `list_for_run`, `list_for_tenant`.
+
+- `backend/store/memory.py` — Added `InMemoryMetricsEventStore` using a flat list with filter-on-read.
+
+- `backend/store/__init__.py` — Re-exported `MetricsEventStore` and `InMemoryMetricsEventStore`.
+
+- `backend/main.py` — Wired `app.state.metrics_event_store = InMemoryMetricsEventStore()`.
+
+- `backend/routers/runs.py`:
+  - `create_run` + `create_run_from_servicenow` — Emit `run_started` MetricsEvent. Pass `metrics_event_store` to orchestrator.
+  - `submit_feedback` — Extract `confidence_at_time` from run result and set on FeedbackEvent. Emit `feedback_recorded` MetricsEvent.
+  - WebSocket handler — Added `_TERMINAL_STATUSES` tuple including `"fallback_completed"` for terminal state checks.
+
+- `backend/services/orchestrator.py`:
+  - Added `metrics_event_store` optional parameter (backward compatible).
+  - Added `emit_metric` helper for MetricsEvent emission.
+  - Emits: `skill_started`/`skill_completed` for each skill, `tool_called`/`tool_failed` for Drive search and Claude synthesis, `run_completed` at terminal.
+  - Uses `fallback_completed` status when fallback synthesis was used, `completed` otherwise.
+
+- `backend/services/telemetry.py`:
+  - `build_run_telemetry` — Sets `status="fallback_completed"` when run completed with `fallback_used=True`.
+  - `aggregate_observability` — Treats `fallback_completed` as completed in count/rate calculations. Adds `model_latency_avg` (mean of skill-level `model_latency_ms`). Adds `confidence_outcome_matrix` (4-cell grid: high/low confidence x positive/negative outcome using feedback or status).
+  - `compute_trends` — Treats `fallback_completed` as success in daily success rate.
+
+- `backend/routers/admin.py` — Updated `_build_tenant_telemetries` to include `fallback_completed` in terminal status check.
+
+**Key design decisions:**
+- **`fallback_completed` is a backend-only state for now** — The orchestrator sets it when fallback synthesis was used. The frontend currently checks `status === 'completed'` — `fallback_completed` runs will appear in the list but the result panel won't render until a future frontend update. This is acceptable as a backend instrumentation sprint.
+- **MetricsEvent is append-only** — No update or delete operations. The store is a flat list filtered on read. This is sufficient for MVP; a real deployment would use a time-series database.
+- **`emit_metric` is fire-and-forget** — If `metrics_event_store` is None (backward compat), metrics are silently skipped. No error propagation from metric emission to the main skill chain.
+- **`confidence_at_time` captures run confidence at feedback submission** — This enables tracking whether high-confidence runs correlate with positive feedback over time, independent of later telemetry recalculations.
+- **Confidence outcome matrix uses 0.7 threshold** — Confidence >= 0.7 is "high", < 0.7 is "low". Positive outcome prefers feedback when available, falls back to run status.
+
+**What GPT should know for next steps:**
+- The frontend Observability page (sprint #013) can now consume the new `confidence_outcome_matrix` and `model_latency_avg` fields from the summary endpoint — currently it derives the matrix client-side from runs data, but the backend-computed version is now available.
+- The `fallback_completed` status needs a frontend update to display properly in RunsPage. Currently those runs show in the list but the result panel gate (`status === 'completed'`) won't match.
+- The `MetricsEvent` store is in-memory and will lose data on restart. It's a diagnostic/audit layer, not critical path.
+- The 7 event types cover the full run lifecycle. The `metadata` field carries context-specific data (error messages, tool names, sys_ids, etc.).
+
+*Next change will be #015.*
