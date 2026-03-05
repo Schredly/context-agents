@@ -1,20 +1,35 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import admin_router, runs_router, tenants_router
+from bootstrap.demo_setup import seed_demo_data
+from routers import admin_router, agent_router, integrations_router, llm_configs_router, runs_router, skills_router, tenants_router, tools_router, uc_runs_router, use_cases_router
 from store import (
     InMemoryClassificationSchemaStore,
     InMemoryEventStore,
     InMemoryFeedbackStore,
     InMemoryGoogleDriveConfigStore,
+    InMemoryIntegrationStore,
+    InMemoryLLMConfigStore,
     InMemoryMetricsEventStore,
     InMemoryRunStore,
     InMemoryServiceNowConfigStore,
+    InMemorySkillStore,
     InMemoryTelemetryStore,
+    InMemoryTenantLLMAssignmentStore,
     InMemoryTenantStore,
+    InMemoryUseCaseRunStore,
+    InMemoryUseCaseStore,
 )
 
-app = FastAPI(title="Context Agents API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await seed_demo_data(app)
+    yield
+
+
+app = FastAPI(title="Context Agents API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,12 +44,25 @@ app.state.tenant_store = InMemoryTenantStore()
 app.state.schema_store = InMemoryClassificationSchemaStore()
 app.state.drive_config_store = InMemoryGoogleDriveConfigStore()
 app.state.snow_config_store = InMemoryServiceNowConfigStore()
+app.state.llm_config_store = InMemoryLLMConfigStore()
+app.state.llm_assignment_store = InMemoryTenantLLMAssignmentStore()
 app.state.run_store = InMemoryRunStore()
 app.state.event_store = InMemoryEventStore()
 app.state.feedback_store = InMemoryFeedbackStore()
 app.state.metrics_event_store = InMemoryMetricsEventStore()
 app.state.telemetry_store = InMemoryTelemetryStore()
+app.state.integration_store = InMemoryIntegrationStore()
+app.state.skill_store = InMemorySkillStore()
+app.state.use_case_store = InMemoryUseCaseStore()
+app.state.use_case_run_store = InMemoryUseCaseRunStore()
 
 app.include_router(tenants_router)
 app.include_router(admin_router)
+app.include_router(agent_router)
+app.include_router(integrations_router)
+app.include_router(tools_router)
+app.include_router(skills_router)
+app.include_router(use_cases_router)
+app.include_router(llm_configs_router)
 app.include_router(runs_router)
+app.include_router(uc_runs_router)

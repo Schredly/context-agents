@@ -1,15 +1,25 @@
 import { createBrowserRouter, Navigate } from 'react-router';
-import { DashboardLayout } from './layouts/DashboardLayout';
+import { Layout } from './components/Layout';
 import { TenantsPage } from './pages/TenantsPage';
-import { SetupWizardPage } from './pages/SetupWizardPage';
-import { RunsPage } from './pages/RunsPage';
-import { ObservabilityPage } from './pages/ObservabilityPage';
+import RunsPage from './pages/RunsPage';
+import ObservabilityPage from './pages/ObservabilityPage';
 import { WorkerServiceNowPage } from './pages/WorkerServiceNowPage';
+import { SettingsPage } from './pages/SettingsPage';
+import IntegrationsPage from './pages/IntegrationsPage';
+import IntegrationConfigPage from './pages/IntegrationConfigPage';
+import SkillsPage from './pages/SkillsPage';
+import SkillEditorPage from './pages/SkillEditorPage';
+import UseCasesPage from './pages/UseCasesPage';
+import UseCaseBuilderPage from './pages/UseCaseBuilderPage';
+import AgentConsolePage from './pages/AgentConsolePage';
+import RunDetailPage from './pages/RunDetailPage';
+import CreateTenantPage from './pages/CreateTenantPage';
+import AgentUIPage from './pages/AgentUIPage';
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    Component: DashboardLayout,
+    Component: Layout,
     children: [
       {
         index: true,
@@ -20,29 +30,69 @@ export const router = createBrowserRouter([
         Component: TenantsPage,
       },
       {
-        path: 'tenants/setup',
-        Component: SetupWizardPage,
+        path: 'tenants/create',
+        Component: CreateTenantPage,
       },
       {
-        path: 'tenants/setup/:id',
-        Component: SetupWizardPage,
+        path: 'integrations',
+        Component: IntegrationsPage,
+      },
+      {
+        path: 'integrations/:id',
+        Component: IntegrationConfigPage,
+      },
+      {
+        path: 'skills',
+        Component: SkillsPage,
+      },
+      {
+        path: 'skills/create',
+        Component: SkillEditorPage,
+      },
+      {
+        path: 'skills/:id',
+        Component: SkillEditorPage,
+      },
+      {
+        path: 'use-cases',
+        Component: UseCasesPage,
+      },
+      {
+        path: 'use-cases/create',
+        Component: UseCaseBuilderPage,
+      },
+      {
+        path: 'use-cases/:id',
+        Component: UseCaseBuilderPage,
       },
       {
         path: 'runs',
         Component: RunsPage,
       },
       {
-        path: 'admin/observability',
+        path: 'runs/:id',
+        Component: RunDetailPage,
+      },
+      {
+        path: 'observability',
         Component: ObservabilityPage,
       },
       {
+        path: 'console',
+        Component: AgentConsolePage,
+      },
+      {
         path: 'settings',
-        element: <div className="p-8 text-muted-foreground">Settings (Coming Soon)</div>,
+        Component: SettingsPage,
       },
     ],
   },
   {
     path: '/worker/servicenow',
     Component: WorkerServiceNowPage,
+  },
+  {
+    path: '/agentui',
+    Component: AgentUIPage,
   },
 ]);

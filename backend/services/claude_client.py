@@ -34,6 +34,48 @@ Respond with ONLY valid JSON (no markdown, no code fences) matching this exact s
 }\
 """
 
+KB_SYSTEM_PROMPT = """\
+You are a resolution assistant for an IT service management system. \
+Your job is to synthesize a resolution recommendation ONLY from the provided \
+knowledge base documents. Do NOT add external knowledge or invent information.
+
+Rules:
+- Answer ONLY from the provided documents. Do not add external knowledge.
+- If the documents are insufficient, say so clearly and lower confidence.
+- Steps must be actionable and concise.
+- Sources must only reference the document links provided — never fabricate URLs.
+- Confidence must reflect how well the documents address the ticket.
+
+Respond with ONLY valid JSON (no markdown, no code fences) matching this exact schema:
+{
+  "summary": "<string: one paragraph summarizing the recommendation>",
+  "recommended_steps": ["<string: actionable step>", ...],
+  "sources": [{"title": "<string>", "url": "<string>"}, ...],
+  "confidence": <number between 0 and 1>
+}\
+"""
+
+LLM_ONLY_SYSTEM_PROMPT = """\
+You are a resolution assistant for an IT service management system. \
+Your job is to synthesize a resolution recommendation for a support ticket \
+using your own knowledge and reasoning. No knowledge base documents are available.
+
+Rules:
+- Use your knowledge to provide the best possible resolution.
+- Steps must be actionable and concise.
+- Do not reference any documents or URLs since none are provided.
+- Sources array should be empty.
+- Confidence should reflect your certainty in the recommendation (typically moderate without docs).
+
+Respond with ONLY valid JSON (no markdown, no code fences) matching this exact schema:
+{
+  "summary": "<string: one paragraph summarizing the recommendation>",
+  "recommended_steps": ["<string: actionable step>", ...],
+  "sources": [],
+  "confidence": <number between 0 and 1>
+}\
+"""
+
 
 def _build_user_message(
     title: str,
@@ -69,38 +111,79 @@ class ClaudeClientError(Exception):
         self.injected: bool = False
 
 
-async def synthesize_resolution(
-    title: str,
-    description: str,
-    classification: list[dict[str, str]],
-    sources: list[dict[str, str]],
-    tenant_notes: str = "",
-) -> dict:
-    """Call Claude to synthesize a resolution. Returns {summary, recommended_steps, sources, confidence}.
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
-    Raises ClaudeClientError on failure (caller should fall back to placeholder).
-    """
-    # --- Failure injection ---
-    if os.environ.get("FAIL_CLAUDE_SYNTHESIS", "").lower() == "true":
-        logger.warning(
-            "[INJECTED FAILURE] Claude synthesis: model=%s", CLAUDE_MODEL,
-        )
-        exc = ClaudeClientError("[INJECTED] Claude synthesis failure")
-        exc.injected = True
-        raise exc
 
-    api_key = os.environ.get("CLAUDE_API_KEY", "")
-    if not api_key:
-        raise ClaudeClientError("CLAUDE_API_KEY not set")
+def _clean_key(key: str) -> str:
+    """Strip whitespace and invisible Unicode characters from API keys."""
+    import unicodedata
+    return "".join(ch for ch in key.strip() if unicodedata.category(ch)[0] != "C")
 
-    user_message = _build_user_message(
-        title, description, classification, sources, tenant_notes
-    )
 
+async def test_api_key(provider: str, api_key: str, model: str) -> None:
+    """Validate an API key by making a minimal API call. Raises ClaudeClientError on failure."""
+    api_key = _clean_key(api_key)
+    if provider == "anthropic":
+        payload = {
+            "model": model,
+            "max_tokens": 1,
+            "messages": [{"role": "user", "content": "Hi"}],
+        }
+        async with httpx.AsyncClient(timeout=15) as client:
+            res = await client.post(
+                CLAUDE_API_URL,
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json=payload,
+            )
+        if not res.is_success:
+            detail = ""
+            try:
+                detail = res.json().get("error", {}).get("message", "")
+            except Exception:
+                pass
+            raise ClaudeClientError(
+                f"Anthropic API returned {res.status_code}: {detail or res.text[:200]}"
+            )
+    elif provider == "openai":
+        payload = {
+            "model": model,
+            "max_tokens": 1,
+            "messages": [
+                {"role": "user", "content": "Hi"},
+            ],
+        }
+        async with httpx.AsyncClient(timeout=15) as client:
+            res = await client.post(
+                OPENAI_API_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+        if not res.is_success:
+            detail = ""
+            try:
+                detail = res.json().get("error", {}).get("message", "")
+            except Exception:
+                pass
+            raise ClaudeClientError(
+                f"OpenAI API returned {res.status_code}: {detail or res.text[:200]}"
+            )
+    else:
+        raise ClaudeClientError(f"Unsupported provider: {provider}")
+
+
+async def _call_anthropic(api_key: str, model: str, user_message: str, *, system_prompt: str = SYSTEM_PROMPT) -> tuple[str, dict]:
+    """Call the Anthropic Messages API. Returns (response_text, raw_body)."""
     payload = {
-        "model": CLAUDE_MODEL,
+        "model": model,
         "max_tokens": 1024,
-        "system": SYSTEM_PROMPT,
+        "system": system_prompt,
         "messages": [{"role": "user", "content": user_message}],
     }
 
@@ -124,25 +207,133 @@ async def synthesize_resolution(
         except Exception:
             pass
         logger.error(
-            "Claude API failed: model=%s http_status=%d error=%s",
-            CLAUDE_MODEL, res.status_code, detail or res.text[:200],
+            "Anthropic API failed: model=%s http_status=%d error=%s",
+            model, res.status_code, detail or res.text[:200],
         )
         raise ClaudeClientError(
-            f"Claude API returned {res.status_code}: {detail or res.text[:200]}"
+            f"Anthropic API returned {res.status_code}: {detail or res.text[:200]}"
         )
 
     body = res.json()
-
-    # Extract text content from the response
     text = ""
     for block in body.get("content", []):
         if block.get("type") == "text":
             text += block["text"]
 
-    if not text.strip():
-        raise ClaudeClientError("Claude returned empty response")
+    meta = {
+        "model": body.get("model", model),
+        "latency_ms": latency_ms,
+        "input_tokens": body.get("usage", {}).get("input_tokens"),
+        "output_tokens": body.get("usage", {}).get("output_tokens"),
+    }
+    return text, meta
 
-    # Parse JSON — strip markdown fences if Claude added them despite instructions
+
+async def _call_openai(api_key: str, model: str, user_message: str, *, system_prompt: str = SYSTEM_PROMPT) -> tuple[str, dict]:
+    """Call the OpenAI Chat Completions API. Returns (response_text, raw_meta)."""
+    payload = {
+        "model": model,
+        "max_tokens": 1024,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+    }
+
+    start = time.monotonic()
+    async with httpx.AsyncClient(timeout=CLAUDE_TIMEOUT) as client:
+        res = await client.post(
+            OPENAI_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+    latency_ms = int((time.monotonic() - start) * 1000)
+
+    if not res.is_success:
+        detail = ""
+        try:
+            detail = res.json().get("error", {}).get("message", "")
+        except Exception:
+            pass
+        logger.error(
+            "OpenAI API failed: model=%s http_status=%d error=%s",
+            model, res.status_code, detail or res.text[:200],
+        )
+        raise ClaudeClientError(
+            f"OpenAI API returned {res.status_code}: {detail or res.text[:200]}"
+        )
+
+    body = res.json()
+    text = ""
+    choices = body.get("choices", [])
+    if choices:
+        text = choices[0].get("message", {}).get("content", "")
+
+    usage = body.get("usage", {})
+    meta = {
+        "model": body.get("model", model),
+        "latency_ms": latency_ms,
+        "input_tokens": usage.get("prompt_tokens"),
+        "output_tokens": usage.get("completion_tokens"),
+    }
+    return text, meta
+
+
+async def synthesize_resolution(
+    title: str,
+    description: str,
+    classification: list[dict[str, str]],
+    sources: list[dict[str, str]],
+    tenant_notes: str = "",
+    *,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
+    include_sources: bool = True,
+) -> dict:
+    """Call an LLM to synthesize a resolution. Returns {summary, recommended_steps, sources, confidence}.
+
+    Raises ClaudeClientError on failure (caller should fall back to placeholder).
+    """
+    # --- Failure injection ---
+    if os.environ.get("FAIL_CLAUDE_SYNTHESIS", "").lower() == "true":
+        logger.warning(
+            "[INJECTED FAILURE] Claude synthesis: model=%s", model or CLAUDE_MODEL,
+        )
+        exc = ClaudeClientError("[INJECTED] Claude synthesis failure")
+        exc.injected = True
+        raise exc
+
+    # Resolve provider / key / model with fallbacks
+    effective_provider = provider or "anthropic"
+    effective_key = _clean_key(api_key or os.environ.get("CLAUDE_API_KEY", ""))
+    effective_model = model or CLAUDE_MODEL
+
+    if not effective_key:
+        raise ClaudeClientError("No API key configured (set via Settings or CLAUDE_API_KEY env var)")
+
+    effective_sources = sources if include_sources else []
+    system_prompt = LLM_ONLY_SYSTEM_PROMPT if not include_sources else SYSTEM_PROMPT
+
+    user_message = _build_user_message(
+        title, description, classification, effective_sources, tenant_notes
+    )
+
+    # Dispatch to the right provider
+    if effective_provider == "anthropic":
+        text, meta = await _call_anthropic(effective_key, effective_model, user_message, system_prompt=system_prompt)
+    elif effective_provider == "openai":
+        text, meta = await _call_openai(effective_key, effective_model, user_message, system_prompt=system_prompt)
+    else:
+        raise ClaudeClientError(f"Unsupported LLM provider: {effective_provider}")
+
+    if not text.strip():
+        raise ClaudeClientError("LLM returned empty response")
+
+    # Parse JSON — strip markdown fences if the model added them despite instructions
     cleaned = text.strip()
     if cleaned.startswith("```"):
         # Remove opening fence (```json or ```)
@@ -155,12 +346,12 @@ async def synthesize_resolution(
     try:
         result = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        raise ClaudeClientError(f"Failed to parse Claude JSON: {exc}")
+        raise ClaudeClientError(f"Failed to parse LLM JSON: {exc}")
 
     # Validate required keys
     for key in ("summary", "recommended_steps", "sources", "confidence"):
         if key not in result:
-            raise ClaudeClientError(f"Missing key in Claude response: {key}")
+            raise ClaudeClientError(f"Missing key in LLM response: {key}")
 
     # Clamp confidence
     conf = result["confidence"]
@@ -169,11 +360,66 @@ async def synthesize_resolution(
     result["confidence"] = max(0.0, min(1.0, float(conf)))
 
     # Attach metadata for the caller
-    result["_meta"] = {
-        "model": body.get("model", CLAUDE_MODEL),
-        "latency_ms": latency_ms,
-        "input_tokens": body.get("usage", {}).get("input_tokens"),
-        "output_tokens": body.get("usage", {}).get("output_tokens"),
-    }
+    result["_meta"] = meta
+
+    return result
+
+
+async def synthesize_from_docs(
+    title: str,
+    description: str,
+    classification: list[dict[str, str]],
+    sources: list[dict[str, str]],
+    tenant_notes: str = "",
+    *,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
+    """Synthesize a resolution from KB documents only. Same return shape as synthesize_resolution."""
+    # Resolve provider / key / model with fallbacks
+    effective_provider = provider or "anthropic"
+    effective_key = _clean_key(api_key or os.environ.get("CLAUDE_API_KEY", ""))
+    effective_model = model or CLAUDE_MODEL
+
+    if not effective_key:
+        raise ClaudeClientError("No API key configured (set via Settings or CLAUDE_API_KEY env var)")
+
+    user_message = _build_user_message(
+        title, description, classification, sources, tenant_notes
+    )
+
+    if effective_provider == "anthropic":
+        text, meta = await _call_anthropic(effective_key, effective_model, user_message, system_prompt=KB_SYSTEM_PROMPT)
+    elif effective_provider == "openai":
+        text, meta = await _call_openai(effective_key, effective_model, user_message, system_prompt=KB_SYSTEM_PROMPT)
+    else:
+        raise ClaudeClientError(f"Unsupported LLM provider: {effective_provider}")
+
+    if not text.strip():
+        raise ClaudeClientError("LLM returned empty response")
+
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        first_newline = cleaned.index("\n")
+        cleaned = cleaned[first_newline + 1 :]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+
+    try:
+        result = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ClaudeClientError(f"Failed to parse LLM JSON: {exc}")
+
+    for key in ("summary", "recommended_steps", "sources", "confidence"):
+        if key not in result:
+            raise ClaudeClientError(f"Missing key in LLM response: {key}")
+
+    conf = result["confidence"]
+    if not isinstance(conf, (int, float)):
+        conf = 0.3
+    result["confidence"] = max(0.0, min(1.0, float(conf)))
+    result["_meta"] = meta
 
     return result

@@ -30,7 +30,7 @@ export function TenantsPage() {
           </p>
         </div>
         <button
-          onClick={() => navigate('/tenants/setup')}
+          onClick={() => navigate('/tenants/create')}
           className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -52,6 +52,9 @@ export function TenantsPage() {
                   Name
                 </th>
                 <th className="text-left px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
+                  Tenant ID
+                </th>
+                <th className="text-left px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
                   Status
                 </th>
                 <th className="text-left px-6 py-3 text-xs text-muted-foreground uppercase tracking-wider">
@@ -65,7 +68,7 @@ export function TenantsPage() {
             <tbody className="divide-y divide-border">
               {tenants.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={5} className="px-6 py-12 text-center text-sm text-muted-foreground">
                     No tenants yet. Click &ldquo;Create Tenant&rdquo; to get started.
                   </td>
                 </tr>
@@ -73,6 +76,7 @@ export function TenantsPage() {
                 tenants.map((tenant) => (
                   <tr key={tenant.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-4 text-sm">{tenant.name}</td>
+                    <td className="px-6 py-4 text-sm font-mono text-muted-foreground">{tenant.id}</td>
                     <td className="px-6 py-4">
                       <span
                         className={`
@@ -93,7 +97,7 @@ export function TenantsPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => navigate(`/tenants/setup/${tenant.id}`)}
+                          onClick={() => navigate(`/tenants/create`)}
                           className="p-2 hover:bg-gray-100 rounded transition-colors"
                           title="Open Setup"
                         >

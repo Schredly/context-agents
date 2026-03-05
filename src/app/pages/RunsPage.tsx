@@ -1,734 +1,301 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Check, CheckCircle, ChevronDown, ChevronRight, ExternalLink, Plus, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
-import { toast } from 'sonner';
-import { useTenants } from '../context/TenantContext';
-import { useGoogleAuth } from '../auth/GoogleAuthContext';
-import * as api from '../services/api';
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router";
+import {
+  Search,
+  Calendar,
+  ChevronDown,
+  Loader2,
+} from "lucide-react";
+import { StatusBadge } from "../components/StatusBadge";
+import { useTenants } from "../context/TenantContext";
+import { getAllUCRuns, type UseCaseRunResponse } from "../services/api";
 
-// --- Types for local state ---
+type StatusFilter = "all" | "completed" | "running" | "failed";
+type DateFilter = "all" | "today" | "yesterday" | "last7days";
 
-interface SkillState {
-  skill_id: string;
-  status: 'pending' | 'running' | 'completed' | 'error';
-  summary: string;
-  events: api.AgentEventResponse[];
-}
-
-const SKILL_ORDER = ['ValidateInput', 'RetrieveDocs', 'SynthesizeResolution', 'RecordOutcome', 'Writeback'];
-
-function buildSkills(events: api.AgentEventResponse[]): SkillState[] {
-  const map = new Map<string, SkillState>();
-  for (const id of SKILL_ORDER) {
-    map.set(id, { skill_id: id, status: 'pending', summary: '', events: [] });
-  }
-  for (const ev of events) {
-    let skill = map.get(ev.skill_id);
-    if (!skill) {
-      skill = { skill_id: ev.skill_id, status: 'pending', summary: '', events: [] };
-      map.set(ev.skill_id, skill);
-    }
-    skill.events.push(ev);
-    skill.summary = ev.summary;
-    if (ev.event_type === 'complete') {
-      skill.status = 'completed';
-    } else if (ev.event_type === 'error') {
-      skill.status = 'error';
-    } else if (skill.status === 'pending') {
-      skill.status = 'running';
-    }
-  }
-  return Array.from(map.values());
-}
-
-// --- Structured Trace Renderer ---
-
-function SkillTrace({ events }: { events: api.AgentEventResponse[] }) {
-  if (events.length === 0) return null;
-
-  const thinking = events.find(e => e.event_type === 'thinking');
-  const toolCall = events.find(e => e.event_type === 'tool_call');
-  const toolResult = events.find(e => e.event_type === 'tool_result');
-  const errorEv = events.find(e => e.event_type === 'error');
-  const completeEv = events.find(e => e.event_type === 'complete');
-
-  // Duration calculation
-  let durationMs: number | null = null;
-  if (events.length >= 2) {
-    const first = new Date(events[0].timestamp).getTime();
-    const last = new Date(events[events.length - 1].timestamp).getTime();
-    const diff = last - first;
-    if (!isNaN(diff) && diff > 0) {
-      durationMs = diff;
-    }
-  }
-
-  const m = (obj: Record<string, unknown> | null | undefined, key: string): string | undefined => {
-    const v = obj?.[key];
-    return v != null ? String(v) : undefined;
-  };
-
-  const tcMeta = toolCall?.metadata;
-  const trMeta = toolResult?.metadata;
-  const cMeta = completeEv?.metadata;
-
-  return (
-    <div className="space-y-2">
-      {/* Intent */}
-      {thinking && (
-        <div>
-          <div className="text-xs font-medium text-gray-400 mb-0.5">Intent</div>
-          <p className="text-sm text-gray-500">{thinking.summary}</p>
-        </div>
-      )}
-
-      {/* Tool Call */}
-      {toolCall && (
-        <div className="rounded-md bg-gray-50 border border-gray-200 p-3">
-          <div className="text-xs font-medium text-gray-400 mb-1">Tool Call</div>
-          <p className="text-sm text-gray-600">{toolCall.summary}</p>
-          {tcMeta && (
-            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
-              {m(tcMeta, 'model') && <span className="text-xs text-gray-400">Model: {m(tcMeta, 'model')}</span>}
-              {m(tcMeta, 'latency_ms') && <span className="text-xs text-gray-400">{m(tcMeta, 'latency_ms')}ms</span>}
-              {m(tcMeta, 'tool_name') && <span className="text-xs text-gray-400">Tool: {m(tcMeta, 'tool_name')}</span>}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Result */}
-      {toolResult && (
-        <div>
-          <div className="text-xs font-medium text-gray-400 mb-0.5">Result</div>
-          <p className="text-sm text-gray-600">{toolResult.summary}</p>
-          {(toolResult.confidence != null || m(trMeta, 'doc_count') || m(trMeta, 'model') || m(trMeta, 'latency_ms')) && (
-            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-              {toolResult.confidence != null && (
-                <span className="text-xs text-gray-400">Confidence: {Math.round(toolResult.confidence * 100)}%</span>
-              )}
-              {m(trMeta, 'doc_count') && <span className="text-xs text-gray-400">Docs: {m(trMeta, 'doc_count')}</span>}
-              {m(trMeta, 'model') && <span className="text-xs text-gray-400">Model: {m(trMeta, 'model')}</span>}
-              {m(trMeta, 'latency_ms') && <span className="text-xs text-gray-400">{m(trMeta, 'latency_ms')}ms</span>}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Error */}
-      {errorEv && (
-        <div className="rounded-md bg-red-50 border border-red-200 p-3">
-          <div className="text-xs font-medium text-red-400 mb-0.5">Error</div>
-          <p className="text-sm text-red-600">{errorEv.summary}</p>
-        </div>
-      )}
-
-      {/* Completion */}
-      {completeEv && (
-        <div className="flex items-center gap-3">
-          {cMeta?.fallback === true && (
-            <span className="text-xs text-amber-600">Fallback used</span>
-          )}
-          {durationMs != null && (
-            <span className="text-xs text-gray-400">Completed in {durationMs}ms</span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- Component ---
-
-export function RunsPage() {
-  const { currentTenantId, currentTenant } = useTenants();
-  const { isAuthenticated, accessToken } = useGoogleAuth();
-
-  const [runs, setRuns] = useState<api.AgentRunResponse[]>([]);
+export default function RunsPage() {
+  const navigate = useNavigate();
+  const { currentTenantId } = useTenants();
+  const [runs, setRuns] = useState<UseCaseRunResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [expandedSkills, setExpandedSkills] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 
-  // Events streamed via WebSocket
-  const [events, setEvents] = useState<api.AgentEventResponse[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
-
-  // Feedback state
-  const [fbOutcome, setFbOutcome] = useState<'success' | 'fail' | null>(null);
-  const [fbReason, setFbReason] = useState<string>('resolved');
-  const [fbNotes, setFbNotes] = useState('');
-  const [fbSubmitting, setFbSubmitting] = useState(false);
-  const [fbRecorded, setFbRecorded] = useState(false);
-
-  // Metrics state
-  const [metrics, setMetrics] = useState<api.MetricsResponse | null>(null);
-
-  // New Run dialog
-  const [showNewRun, setShowNewRun] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newDescription, setNewDescription] = useState('');
-  const [creating, setCreating] = useState(false);
-
-  // Fetch runs when tenant changes
   const fetchRuns = useCallback(async () => {
-    if (!currentTenantId) { setRuns([]); setLoading(false); return; }
+    if (!currentTenantId) return;
     setLoading(true);
     try {
-      const data = await api.getRuns(currentTenantId);
+      const data = await getAllUCRuns(currentTenantId);
       setRuns(data);
     } catch {
-      toast.error('Failed to load runs');
+      // ignore
     } finally {
       setLoading(false);
     }
   }, [currentTenantId]);
 
-  useEffect(() => { fetchRuns(); }, [fetchRuns]);
-
-  // Fetch metrics when tenant changes
   useEffect(() => {
-    if (!currentTenantId) { setMetrics(null); return; }
-    api.getMetrics(currentTenantId).then(setMetrics).catch(() => setMetrics(null));
-  }, [currentTenantId]);
+    fetchRuns();
+  }, [fetchRuns]);
 
-  // Load existing feedback when selecting a completed run
-  useEffect(() => {
-    setFbOutcome(null);
-    setFbReason('resolved');
-    setFbNotes('');
-    setFbRecorded(false);
-    if (!selectedRunId || !currentTenantId) return;
-    const run = runs.find(r => r.run_id === selectedRunId);
-    if (run?.status !== 'completed') return;
-    api.getFeedback(selectedRunId, currentTenantId).then(fb => {
-      if (fb) {
-        setFbOutcome(fb.outcome);
-        setFbReason(fb.reason);
-        setFbNotes(fb.notes);
-        setFbRecorded(true);
-      }
-    }).catch(() => {});
-  }, [selectedRunId, currentTenantId, runs]);
+  // Filter runs
+  const filteredRuns = useMemo(() => {
+    let filtered = runs;
 
-  // Connect WebSocket when selecting a run
-  useEffect(() => {
-    if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-    if (!selectedRunId || !currentTenantId) { setEvents([]); return; }
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (run) =>
+          run.run_id.toLowerCase().includes(query) ||
+          run.use_case_name.toLowerCase().includes(query) ||
+          run.tenant_id.toLowerCase().includes(query)
+      );
+    }
 
-    // Connect WS which will replay existing events + stream live ones
-    const ws = api.connectRunEvents(
-      selectedRunId,
-      currentTenantId,
-      (event) => setEvents(prev => [...prev, event]),
-      (_status) => {
-        // Refresh the run to get final result
-        if (currentTenantId && selectedRunId) {
-          api.getRun(currentTenantId, selectedRunId).then(updated => {
-            setRuns(prev => prev.map(r => r.run_id === updated.run_id ? updated : r));
-          }).catch(() => {});
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((run) => run.status === statusFilter);
+    }
+
+    if (dateFilter !== "all") {
+      const now = new Date();
+      filtered = filtered.filter((run) => {
+        const runDate = new Date(run.started_at);
+        const diffDays = Math.floor(
+          (now.getTime() - runDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
+        switch (dateFilter) {
+          case "today":
+            return diffDays === 0;
+          case "yesterday":
+            return diffDays === 1;
+          case "last7days":
+            return diffDays <= 7;
+          default:
+            return true;
         }
-      },
+      });
+    }
+
+    return filtered;
+  }, [runs, searchQuery, statusFilter, dateFilter]);
+
+  // Status counts
+  const statusCounts = useMemo(() => {
+    return {
+      all: runs.length,
+      completed: runs.filter((r) => r.status === "completed").length,
+      running: runs.filter((r) => r.status === "running" || r.status === "queued").length,
+      failed: runs.filter((r) => r.status === "failed").length,
+    };
+  }, [runs]);
+
+  const formatLatency = (ms: number) => {
+    if (!ms) return "—";
+    return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString();
+  };
+
+  if (loading) {
+    return (
+      <div className="p-8 bg-gray-50 min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
     );
-    wsRef.current = ws;
-    setEvents([]);
-
-    return () => { ws.close(); };
-  }, [selectedRunId, currentTenantId]);
-
-  const selectedRun = runs.find(r => r.run_id === selectedRunId) ?? null;
-  const skills = buildSkills(events);
-
-  const toggleSkill = (skillId: string) => {
-    setExpandedSkills(prev => {
-      const next = new Set(prev);
-      if (next.has(skillId)) next.delete(skillId); else next.add(skillId);
-      return next;
-    });
-  };
-
-  const handleCreateRun = async () => {
-    if (!currentTenantId || !accessToken || !newTitle.trim()) return;
-    setCreating(true);
-    try {
-      const workObject: api.WorkObject = {
-        work_id: `WO-${Date.now()}`,
-        source_system: 'ui',
-        record_type: 'incident',
-        title: newTitle.trim(),
-        description: newDescription.trim(),
-        classification: [],
-      };
-      const { run_id } = await api.createRun(currentTenantId, accessToken, workObject);
-      setShowNewRun(false);
-      setNewTitle('');
-      setNewDescription('');
-      toast.success('Run created');
-      // Refresh and select
-      await fetchRuns();
-      setSelectedRunId(run_id);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create run');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleSubmitFeedback = async () => {
-    if (!currentTenantId || !selectedRunId || !fbOutcome) return;
-    setFbSubmitting(true);
-    try {
-      await api.submitFeedback(currentTenantId, selectedRunId, fbOutcome, fbReason, fbNotes);
-      setFbRecorded(true);
-      toast.success('Feedback recorded');
-      // Refresh metrics
-      api.getMetrics(currentTenantId).then(setMetrics).catch(() => {});
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to submit feedback');
-    } finally {
-      setFbSubmitting(false);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return 'bg-green-500';
-      case 'running': return 'bg-blue-500 animate-pulse';
-      case 'queued': return 'bg-yellow-400 animate-pulse';
-      case 'failed': case 'error': return 'bg-red-500';
-      default: return 'bg-gray-300';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'completed': return 'Resolution Ready';
-      case 'running': return 'Running';
-      case 'queued': return 'Queued';
-      case 'failed': return 'Failed';
-      case 'error': return 'Error';
-      default: return 'Pending';
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed': return 'bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-[14px] rounded-full px-3 py-0.5';
-      case 'running': return 'bg-blue-100 text-blue-800 border border-blue-200 rounded-full px-3 py-0.5';
-      case 'queued': return 'bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-full px-3 py-0.5';
-      case 'failed': case 'error': return 'bg-red-50 text-red-700 border border-red-200 rounded-full px-3 py-0.5';
-      default: return 'bg-gray-100 text-gray-800 rounded-full px-3 py-0.5';
-    }
-  };
+  }
 
   return (
-    <div className="flex h-full">
-      {/* Left Column - Runs List */}
-      <div className="w-80 border-r border-border bg-white overflow-auto flex flex-col">
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-lg">Runs</h2>
-            <button
-              onClick={() => setShowNewRun(true)}
-              disabled={!isAuthenticated || !currentTenantId}
-              title={!isAuthenticated ? 'Sign in with Google first' : !currentTenantId ? 'Select a tenant first' : 'New Run'}
-              className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {currentTenant ? currentTenant.name : 'No tenant selected'}
-            {' '}&middot; {runs.length} run{runs.length !== 1 ? 's' : ''}
+    <div className="p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-[1600px] mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Runs</h1>
+          <p className="text-sm text-gray-600">
+            Execution history of all agent runs across tenants and use cases.
           </p>
-          {!isAuthenticated && (
-            <p className="text-xs text-yellow-700 mt-1">Sign in with Google to create runs</p>
-          )}
         </div>
 
-        {/* Metrics Summary */}
-        {metrics && (
-          <div className="px-4 py-3 border-b border-border">
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-gray-50 rounded p-2">
-                <div className="text-muted-foreground">Success Rate</div>
-                <div className="text-sm font-medium">
-                  {metrics.success_rate != null ? `${Math.round(metrics.success_rate * 100)}%` : '—'}
-                </div>
-              </div>
-              <div className="bg-gray-50 rounded p-2">
-                <div className="text-muted-foreground">Avg Confidence</div>
-                <div className="text-sm font-medium">
-                  {metrics.avg_confidence != null ? `${Math.round(metrics.avg_confidence * 100)}%` : '—'}
-                </div>
-              </div>
-              <div className="bg-gray-50 rounded p-2">
-                <div className="text-muted-foreground">Doc Hit Rate</div>
-                <div className="text-sm font-medium">
-                  {metrics.doc_hit_rate != null ? `${Math.round(metrics.doc_hit_rate * 100)}%` : '—'}
-                </div>
-              </div>
-              <div className="bg-gray-50 rounded p-2">
-                <div className="text-muted-foreground">Total Runs</div>
-                <div className="text-sm font-medium">{metrics.total_runs}</div>
-              </div>
+        {/* Filters */}
+        <div className="mb-6 space-y-4">
+          {/* Search and Date Filter Row */}
+          <div className="flex gap-4">
+            {/* Search Input */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by run ID, tenant, or use case..."
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
-          </div>
-        )}
 
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : runs.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center p-4">
-            <p className="text-sm text-muted-foreground text-center">
-              No runs yet.{' '}
-              {isAuthenticated && currentTenantId
-                ? 'Click + to create one.'
-                : 'Select a tenant and sign in to start.'}
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-border overflow-auto">
-            {runs.map((run) => (
-              <button
-                key={run.run_id}
-                onClick={() => setSelectedRunId(run.run_id)}
-                className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${
-                  selectedRunId === run.run_id ? 'bg-blue-50' : ''
-                }`}
+            {/* Date Filter */}
+            <div className="relative min-w-[180px]">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+                className="appearance-none w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-mono truncate mr-2">{run.run_id}</span>
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${getStatusColor(run.status)}`} />
-                </div>
-                <div className="text-sm truncate">{run.work_object.title}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {format(new Date(run.started_at), 'MMM d, h:mm a')}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Right Column - Run Detail */}
-      <div className="flex-1 overflow-auto">
-        {/* New Run Form */}
-        {showNewRun && (
-          <div className="p-8 max-w-2xl">
-            <h2 className="text-xl mb-4">New Run</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm mb-1">Title</label>
-                <input
-                  type="text"
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                  placeholder="e.g., VPN connection issue"
-                  className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm mb-1">Description</label>
-                <textarea
-                  value={newDescription}
-                  onChange={e => setNewDescription(e.target.value)}
-                  placeholder="Describe the issue..."
-                  rows={4}
-                  className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleCreateRun}
-                  disabled={creating || !newTitle.trim()}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm disabled:opacity-50"
-                >
-                  {creating && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {creating ? 'Creating...' : 'Start Run'}
-                </button>
-                <button
-                  onClick={() => { setShowNewRun(false); setNewTitle(''); setNewDescription(''); }}
-                  className="px-4 py-2 border border-border rounded-md hover:bg-gray-50 transition-colors text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
+                <option value="all">All time</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="last7days">Last 7 days</option>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
           </div>
-        )}
 
-        {/* Run Detail */}
-        {!showNewRun && selectedRun ? (
-          <div className="p-8 max-w-4xl">
-            {/* Run Header */}
-            <div className="mb-8">
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-xl">{selectedRun.work_object.title}</h1>
-                <span className={`inline-flex items-center text-xs ${getStatusBadge(selectedRun.status)}`}>
-                  {getStatusText(selectedRun.status)}
-                </span>
-              </div>
-              <p className="text-xs font-mono text-muted-foreground mb-1">{selectedRun.run_id}</p>
-              <p className="text-sm text-muted-foreground">
-                {format(new Date(selectedRun.started_at), 'MMMM d, yyyy at h:mm:ss a')}
-              </p>
-            </div>
+          {/* Status Filter Pills */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setStatusFilter("all")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                statusFilter === "all"
+                  ? "bg-gray-900 text-white border-gray-900"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              All
+              <span className="ml-2 text-xs opacity-75">
+                {statusCounts.all}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter("completed")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                statusFilter === "completed"
+                  ? "bg-green-600 text-white border-green-600"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              Completed
+              <span className="ml-2 text-xs opacity-75">
+                {statusCounts.completed}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter("running")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                statusFilter === "running"
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              Running
+              <span className="ml-2 text-xs opacity-75">
+                {statusCounts.running}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter("failed")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                statusFilter === "failed"
+                  ? "bg-red-600 text-white border-red-600"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              Failed
+              <span className="ml-2 text-xs opacity-75">
+                {statusCounts.failed}
+              </span>
+            </button>
+          </div>
+        </div>
 
-            {/* Incident Context — collapsed by default */}
-            {selectedRun.work_object.description && (
-              <details className="mb-8 border border-border rounded-lg overflow-hidden">
-                <summary className="px-4 py-3 text-sm font-medium cursor-pointer hover:bg-gray-50 transition-colors select-none flex items-center gap-2">
-                  <ChevronRight className="w-4 h-4 text-muted-foreground details-open-rotate" />
-                  Incident Context
-                </summary>
-                <div className="px-4 pb-4 pt-1 border-t border-border bg-gray-50/50">
-                  <p className="text-sm text-gray-500 leading-relaxed">{selectedRun.work_object.description}</p>
-                  {selectedRun.work_object.classification.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {selectedRun.work_object.classification.map((cp, i) => (
-                        <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600 border border-gray-200">
-                          {cp.name}: {cp.value}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </details>
-            )}
+        {/* Results count */}
+        <div className="mb-4">
+          <p className="text-sm text-gray-600">
+            Showing {filteredRuns.length} of {runs.length} runs
+          </p>
+        </div>
 
-            {/* Skills Timeline */}
-            <div className="mb-8">
-              <h2 className="text-lg mb-4">Skills Timeline</h2>
-              <div className="space-y-2">
-                {skills.map((skill) => {
-                  const isActive = skill.status === 'running';
-                  return (
-                    <div
-                      key={skill.skill_id}
-                      className={`border rounded-lg overflow-hidden transition-shadow ${
-                        isActive
-                          ? 'border-l-[3px] border-l-blue-500 border-t-border border-r-border border-b-border shadow-sm'
-                          : 'border-border'
-                      }`}
-                    >
-                      <button
-                        onClick={() => toggleSkill(skill.skill_id)}
-                        className={`w-full p-3.5 flex items-start gap-3 transition-colors ${
-                          isActive ? 'bg-blue-50/40' : 'hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${getStatusColor(skill.status)}`} />
-                        <div className="flex-1 text-left">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <span className={`text-sm ${isActive ? 'font-medium' : ''}`}>{skill.skill_id}</span>
-                            <div className="flex items-center gap-1.5">
-                              {isActive && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
-                              {expandedSkills.has(skill.skill_id)
-                                ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                : <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                              }
-                            </div>
-                          </div>
-                          <p className="text-sm text-muted-foreground">{skill.summary || 'Waiting...'}</p>
-                        </div>
-                      </button>
-
-                      {expandedSkills.has(skill.skill_id) && skill.events.length > 0 && (
-                        <div className="px-4 pb-3 pl-9 bg-gray-50 border-t border-gray-100">
-                          <div className="pt-2">
-                            <SkillTrace events={skill.events} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Result Panel */}
-            {selectedRun.status === 'completed' && selectedRun.result && (
-              <div className="border border-border rounded-lg p-6 bg-white">
-                <div className="mb-1">
-                  <h2 className="text-lg font-medium">Recommended Resolution</h2>
-                  {selectedRun.result.sources.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Based on {selectedRun.result.sources.length} knowledge source{selectedRun.result.sources.length !== 1 ? 's' : ''}
-                    </p>
-                  )}
-                </div>
-
-                {/* Summary */}
-                <div className="mb-5 mt-4">
-                  <p className="text-sm leading-relaxed text-gray-500">{selectedRun.result.summary}</p>
-                </div>
-
-                {/* Confidence Score */}
-                <div className="flex items-center justify-between mb-5 pb-4 border-b border-border">
-                  <div className="text-sm text-muted-foreground">Confidence</div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 rounded-full transition-all"
-                        style={{ width: `${selectedRun.result.confidence * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">{Math.round(selectedRun.result.confidence * 100)}%</span>
-                  </div>
-                </div>
-
-                {/* Steps */}
-                {selectedRun.result.steps.length > 0 && (
-                  <div className="mb-5">
-                    <div className="text-sm font-medium text-gray-700 mb-2">Resolution Steps</div>
-                    <ol className="space-y-0.5">
-                      {selectedRun.result.steps.map((step, index) => (
-                        <li key={index} className="flex gap-3 py-2 px-2 rounded-md hover:bg-gray-50 transition-colors">
-                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-medium">
-                            {index + 1}
-                          </span>
-                          <span className="text-sm text-gray-600 flex-1">{step}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-
-                {/* Sources */}
-                {selectedRun.result.sources.length > 0 && (
-                  <div className="mb-5">
-                    <div className="text-sm font-medium text-gray-700 mb-2">Knowledge Sources</div>
-                    <div className="space-y-1">
-                      {selectedRun.result.sources.map((source, index) => (
-                        <a
-                          key={index}
-                          href={source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between p-2 rounded-md hover:bg-gray-50 transition-colors group"
-                        >
-                          <span className="text-sm text-gray-500 group-hover:text-gray-800 transition-colors">{source.title}</span>
-                          <ExternalLink className="w-3 h-3 text-gray-400 group-hover:text-blue-500 transition-colors" />
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Run ID */}
-                <div className="flex items-center justify-between pt-4 border-t border-border">
-                  <div className="text-sm text-muted-foreground">Run ID</div>
-                  <div className="text-sm font-mono text-gray-500">{selectedRun.run_id}</div>
-                </div>
-              </div>
-            )}
-
-            {/* Feedback Form */}
-            {selectedRun.status === 'completed' && (
-              <div className="border border-border rounded-lg p-6 bg-white mt-6">
-                <h2 className="text-lg mb-4">
-                  {fbRecorded ? (
-                    <span className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                      Feedback Recorded
-                    </span>
-                  ) : 'Rate this Result'}
-                </h2>
-
-                <div className="space-y-4">
-                  {/* Outcome toggle */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => { setFbOutcome('success'); setFbRecorded(false); }}
-                      className={`px-4 py-1.5 rounded-md text-sm border transition-colors ${
-                        fbOutcome === 'success'
-                          ? 'border-green-500 bg-green-50 text-green-700'
-                          : 'border-border hover:bg-gray-50'
-                      }`}
-                    >
-                      Success
-                    </button>
-                    <button
-                      onClick={() => { setFbOutcome('fail'); setFbRecorded(false); }}
-                      className={`px-4 py-1.5 rounded-md text-sm border transition-colors ${
-                        fbOutcome === 'fail'
-                          ? 'border-red-500 bg-red-50 text-red-700'
-                          : 'border-border hover:bg-gray-50'
-                      }`}
-                    >
-                      Fail
-                    </button>
-                  </div>
-
-                  {/* Reason select */}
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-1">Reason</label>
-                    <select
-                      value={fbReason}
-                      onChange={e => { setFbReason(e.target.value); setFbRecorded(false); }}
-                      className="w-full px-3 py-1.5 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="resolved">Resolved</option>
-                      <option value="partial">Partial</option>
-                      <option value="wrong-doc">Wrong Document</option>
-                      <option value="missing-context">Missing Context</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-
-                  {/* Notes */}
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-1">Notes (optional)</label>
-                    <textarea
-                      value={fbNotes}
-                      onChange={e => { setFbNotes(e.target.value); setFbRecorded(false); }}
-                      rows={2}
-                      placeholder="Any additional comments..."
-                      className="w-full px-3 py-1.5 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                    />
-                  </div>
-
-                  {/* Submit — enterprise green with check icon */}
-                  <button
-                    onClick={handleSubmitFeedback}
-                    disabled={!fbOutcome || fbSubmitting}
-                    className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-700 text-white rounded-md hover:bg-emerald-800 active:bg-emerald-900 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        {/* Table */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Run ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Use Case
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Steps
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Duration
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Started
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filteredRuns.length > 0 ? (
+                filteredRuns.map((run) => (
+                  <tr
+                    key={run.run_id}
+                    onClick={() => navigate(`/runs/${run.run_id}`)}
+                    className="hover:bg-gray-50 transition-colors cursor-pointer"
                   >
-                    {fbSubmitting ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Check className="w-4 h-4" />
-                    )}
-                    {fbRecorded ? 'Resubmit' : 'Submit Feedback'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {(selectedRun.status === 'running' || selectedRun.status === 'queued') && (
-              <div className="border border-border rounded-lg p-6 bg-blue-50">
-                <p className="text-sm text-blue-900 flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  This run is in progress. Events will stream live below the timeline.
-                </p>
-              </div>
-            )}
-
-            {selectedRun.status === 'failed' && (
-              <div className="border border-border rounded-lg p-6 bg-red-50">
-                <p className="text-sm text-red-900">
-                  This run failed. Check the skill timeline above for error details.
-                </p>
-              </div>
-            )}
-          </div>
-        ) : !showNewRun ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-muted-foreground">Select a run to view details</p>
-          </div>
-        ) : null}
+                    <td className="px-6 py-4">
+                      <code className="text-sm font-mono text-gray-900">
+                        {run.run_id}
+                      </code>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-gray-900">{run.use_case_name}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <StatusBadge status={run.status === "queued" ? "pending" : run.status} />
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-gray-600">{run.steps.length}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <code className="text-sm font-mono text-gray-600">
+                        {formatLatency(run.total_latency_ms)}
+                      </code>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-gray-600 font-mono">
+                        {formatDate(run.started_at)}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <Search className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-sm font-medium text-gray-900 mb-1">
+                        No runs found
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {runs.length === 0
+                          ? "Execute a use case from the Agent Console to create runs."
+                          : "Try adjusting your search or filters"}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

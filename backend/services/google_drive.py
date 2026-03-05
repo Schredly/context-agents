@@ -10,6 +10,7 @@ import httpx
 DRIVE_API = "https://www.googleapis.com/drive/v3"
 UPLOAD_API = "https://www.googleapis.com/upload/drive/v3"
 FOLDER_MIME = "application/vnd.google-apps.folder"
+DRIVE_TIMEOUT = 30  # seconds — scaffold can create many folders in sequence
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class GoogleDriveProvider:
         self, access_token: str, folder_id: str
     ) -> dict[str, str]:
         """GET a single file, validate it is a folder. Returns {id, name}."""
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=DRIVE_TIMEOUT) as client:
             res = await client.get(
                 f"{DRIVE_API}/files/{folder_id}",
                 params={"fields": "id,name,mimeType", "supportsAllDrives": "true"},
@@ -59,7 +60,7 @@ class GoogleDriveProvider:
             f"name='{name}' and '{parent_id}' in parents "
             f"and mimeType='{FOLDER_MIME}' and trashed=false"
         )
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=DRIVE_TIMEOUT) as client:
             search = await client.get(
                 f"{DRIVE_API}/files",
                 params={
@@ -191,7 +192,7 @@ class GoogleDriveProvider:
             f"'{folder_id}' in parents and ({name_clauses}) "
             f"and mimeType!='{FOLDER_MIME}' and trashed=false"
         )
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=DRIVE_TIMEOUT) as client:
             res = await client.get(
                 f"{DRIVE_API}/files",
                 params={
@@ -233,7 +234,7 @@ class GoogleDriveProvider:
 
         # Search for existing file
         q = f"name='{file_name}' and '{schema_folder_id}' in parents and trashed=false"
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=DRIVE_TIMEOUT) as client:
             search = await client.get(
                 f"{DRIVE_API}/files",
                 params={
@@ -288,3 +289,53 @@ class GoogleDriveProvider:
             body_json = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
             msg = body_json.get("error", {}).get("message", f"Upload failed ({res.status_code})")
             raise GoogleDriveError(res.status_code, msg)
+
+    async def upload_document(
+        self,
+        access_token: str,
+        folder_id: str,
+        filename: str,
+        content: str,
+        mime_type: str = "text/markdown",
+    ) -> dict[str, str]:
+        """Upload a text document to a Drive folder. Returns {id, name, webViewLink}."""
+        boundary = f"boundary-{uuid.uuid4().hex}"
+        metadata = json.dumps(
+            {"name": filename, "mimeType": mime_type, "parents": [folder_id]}
+        )
+        body = (
+            f"--{boundary}\r\n"
+            f"Content-Type: application/json; charset=UTF-8\r\n\r\n"
+            f"{metadata}\r\n"
+            f"--{boundary}\r\n"
+            f"Content-Type: {mime_type}\r\n\r\n"
+            f"{content}\r\n"
+            f"--{boundary}--"
+        )
+
+        async with httpx.AsyncClient(timeout=DRIVE_TIMEOUT) as client:
+            res = await client.post(
+                f"{UPLOAD_API}/files",
+                params={
+                    "uploadType": "multipart",
+                    "supportsAllDrives": "true",
+                    "fields": "id,name,webViewLink",
+                },
+                headers={
+                    **_auth(access_token),
+                    "Content-Type": f"multipart/related; boundary={boundary}",
+                },
+                content=body.encode(),
+            )
+
+        if not res.is_success:
+            body_json = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
+            msg = body_json.get("error", {}).get("message", f"Upload failed ({res.status_code})")
+            raise GoogleDriveError(res.status_code, msg)
+
+        d = res.json()
+        return {
+            "id": d.get("id", ""),
+            "name": d.get("name", ""),
+            "webViewLink": d.get("webViewLink", ""),
+        }

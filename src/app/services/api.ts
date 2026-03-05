@@ -59,6 +59,13 @@ export interface WorkObject {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface AnswerPayload {
+  summary: string;
+  steps: string[];
+  sources: { title: string; url: string }[];
+  confidence: number;
+}
+
 export interface AgentRunResponse {
   run_id: string;
   tenant_id: string;
@@ -67,10 +74,17 @@ export interface AgentRunResponse {
   completed_at: string | null;
   work_object: WorkObject;
   result: {
+    // Top-level backward-compat fields (always present)
     summary: string;
     steps: string[];
     sources: { title: string; url: string }[];
     confidence: number;
+    // Dual-answer fields
+    mode?: 'dual' | 'single';
+    kb_answer?: AnswerPayload;
+    llm_answer?: AnswerPayload;
+    selected?: 'kb' | 'llm' | null;
+    classification_folder_id?: string | null;
   } | null;
 }
 
@@ -406,6 +420,122 @@ export function getObservabilityRuns(
   return request(`/admin/${tenantId}/observability/runs?limit=${limit}`);
 }
 
+// --- LLM Config (global pool) ---
+
+export interface LLMConfigResponse {
+  id: string;
+  label: string;
+  provider: string;
+  api_key: string;
+  model: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantLLMAssignmentResponse {
+  tenant_id: string;
+  llm_config_id: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface LLMProviderModel {
+  id: string;
+  name: string;
+}
+
+export interface LLMProviderInfo {
+  name: string;
+  models: LLMProviderModel[];
+}
+
+// --- Global LLM config CRUD ---
+
+export function getLLMProviders(): Promise<Record<string, LLMProviderInfo>> {
+  return request('/llm-configs/providers');
+}
+
+export function getLLMConfigs(): Promise<LLMConfigResponse[]> {
+  return request('/llm-configs');
+}
+
+export function createLLMConfig(
+  label: string,
+  provider: string,
+  apiKey: string,
+  model: string,
+): Promise<LLMConfigResponse> {
+  return request('/llm-configs', {
+    method: 'POST',
+    body: JSON.stringify({ label, provider, api_key: apiKey, model }),
+  });
+}
+
+export function updateLLMConfig(
+  configId: string,
+  updates: { label?: string; provider?: string; api_key?: string; model?: string },
+): Promise<LLMConfigResponse> {
+  return request(`/llm-configs/${configId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+export function deleteLLMConfig(
+  configId: string,
+): Promise<{ ok: boolean }> {
+  return request(`/llm-configs/${configId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function testLLMConfig(
+  provider: string,
+  apiKey: string,
+  model: string,
+): Promise<{ ok: boolean }> {
+  return request('/llm-configs/test', {
+    method: 'POST',
+    body: JSON.stringify({ provider, api_key: apiKey, model }),
+  });
+}
+
+// --- Tenant LLM assignments ---
+
+export function getTenantLLMAssignments(
+  tenantId: string,
+): Promise<TenantLLMAssignmentResponse[]> {
+  return request(`/admin/${tenantId}/llm-assignments`);
+}
+
+export function assignLLMConfig(
+  tenantId: string,
+  llmConfigId: string,
+): Promise<TenantLLMAssignmentResponse> {
+  return request(`/admin/${tenantId}/llm-assignments`, {
+    method: 'POST',
+    body: JSON.stringify({ llm_config_id: llmConfigId }),
+  });
+}
+
+export function unassignLLMConfig(
+  tenantId: string,
+  configId: string,
+): Promise<{ ok: boolean }> {
+  return request(`/admin/${tenantId}/llm-assignments/${configId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function activateLLMAssignment(
+  tenantId: string,
+  configId: string,
+): Promise<TenantLLMAssignmentResponse> {
+  return request(`/admin/${tenantId}/llm-assignments/${configId}/activate`, {
+    method: 'PUT',
+  });
+}
+
 // --- Runs (server-side) ---
 
 export function createRun(
@@ -456,6 +586,433 @@ export function connectRunEvents(
   };
   ws.onerror = (err) => onError?.(err);
   return ws;
+}
+
+// --- Answer Selection + Save to Drive ---
+
+export function selectRunAnswer(
+  runId: string,
+  tenantId: string,
+  selected: 'kb' | 'llm',
+): Promise<AgentRunResponse> {
+  return request(`/runs/${runId}/select-answer`, {
+    method: 'PUT',
+    body: JSON.stringify({ tenant_id: tenantId, selected }),
+  });
+}
+
+export function saveAnswerToDrive(
+  runId: string,
+  tenantId: string,
+  accessToken: string,
+): Promise<{ ok: boolean; file_id: string; web_link: string }> {
+  return request(`/runs/${runId}/save-to-drive`, {
+    method: 'POST',
+    body: JSON.stringify({ tenant_id: tenantId, access_token: accessToken }),
+  });
+}
+
+// --- Integrations ---
+
+export interface IntegrationResponse {
+  id: string;
+  tenant_id: string;
+  integration_type: string;
+  enabled: boolean;
+  config: Record<string, string>;
+  connection_status: 'connected' | 'not-connected' | 'error';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationCatalogEntry {
+  name: string;
+  description: string;
+  config_fields: string[];
+}
+
+export function getIntegrationCatalog(
+  tenantId: string,
+): Promise<Record<string, IntegrationCatalogEntry>> {
+  return request(`/admin/${tenantId}/integrations/catalog`);
+}
+
+export function getIntegrations(
+  tenantId: string,
+): Promise<IntegrationResponse[]> {
+  return request(`/admin/${tenantId}/integrations`);
+}
+
+export function getIntegration(
+  tenantId: string,
+  integrationId: string,
+): Promise<IntegrationResponse> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}`);
+}
+
+export function createIntegration(
+  tenantId: string,
+  integrationType: string,
+): Promise<IntegrationResponse> {
+  return request(`/admin/${tenantId}/integrations`, {
+    method: 'POST',
+    body: JSON.stringify({ integration_type: integrationType }),
+  });
+}
+
+export function updateIntegrationConfig(
+  tenantId: string,
+  integrationId: string,
+  config: Record<string, string>,
+): Promise<IntegrationResponse> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/config`, {
+    method: 'PUT',
+    body: JSON.stringify({ config }),
+  });
+}
+
+export function enableIntegration(
+  tenantId: string,
+  integrationId: string,
+): Promise<IntegrationResponse> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/enable`, {
+    method: 'PUT',
+  });
+}
+
+export function disableIntegration(
+  tenantId: string,
+  integrationId: string,
+): Promise<IntegrationResponse> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/disable`, {
+    method: 'PUT',
+  });
+}
+
+export function testIntegration(
+  tenantId: string,
+  integrationId: string,
+): Promise<{ ok: boolean }> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/test`, {
+    method: 'POST',
+  });
+}
+
+export function deleteIntegration(
+  tenantId: string,
+  integrationId: string,
+): Promise<{ ok: boolean }> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}`, {
+    method: 'DELETE',
+  });
+}
+
+// --- Tools ---
+
+export interface ToolCatalogEntry {
+  tool_id: string;
+  integration_type: string;
+  name: string;
+  description: string;
+  input_schema: Record<string, string>;
+  output_schema: Record<string, string>;
+}
+
+export interface ToolsResponse {
+  tools: ToolCatalogEntry[];
+  by_integration: Record<string, ToolCatalogEntry[]>;
+}
+
+export function getToolsCatalog(
+  tenantId: string,
+): Promise<ToolsResponse> {
+  return request(`/admin/${tenantId}/tools/catalog`);
+}
+
+export function getAvailableTools(
+  tenantId: string,
+): Promise<ToolsResponse> {
+  return request(`/admin/${tenantId}/tools/available`);
+}
+
+// --- Skills ---
+
+export interface SkillResponse {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description: string;
+  model: string;
+  instructions: string;
+  tools: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export function getSkills(tenantId: string): Promise<SkillResponse[]> {
+  return request(`/admin/${tenantId}/skills`);
+}
+
+export function getSkill(
+  tenantId: string,
+  skillId: string,
+): Promise<SkillResponse> {
+  return request(`/admin/${tenantId}/skills/${skillId}`);
+}
+
+export function createSkill(
+  tenantId: string,
+  payload: {
+    name: string;
+    description?: string;
+    model?: string;
+    instructions?: string;
+    tools?: string[];
+  },
+): Promise<SkillResponse> {
+  return request(`/admin/${tenantId}/skills`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSkill(
+  tenantId: string,
+  skillId: string,
+  payload: {
+    name?: string;
+    description?: string;
+    model?: string;
+    instructions?: string;
+    tools?: string[];
+  },
+): Promise<SkillResponse> {
+  return request(`/admin/${tenantId}/skills/${skillId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteSkill(
+  tenantId: string,
+  skillId: string,
+): Promise<{ ok: boolean }> {
+  return request(`/admin/${tenantId}/skills/${skillId}`, {
+    method: 'DELETE',
+  });
+}
+
+// --- Use Cases ---
+
+export interface UseCaseStepResponse {
+  step_id: string;
+  skill_id: string;
+  name: string;
+  input_mapping: string;
+  output_mapping: string;
+}
+
+export interface UseCaseResponse {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description: string;
+  status: 'draft' | 'active';
+  triggers: string[];
+  steps: UseCaseStepResponse[];
+  created_at: string;
+  updated_at: string;
+}
+
+// (RunUseCaseResponse replaced by UseCaseRunResponse below)
+
+export function getUseCases(tenantId: string): Promise<UseCaseResponse[]> {
+  return request(`/admin/${tenantId}/use-cases`);
+}
+
+export function getUseCase(
+  tenantId: string,
+  useCaseId: string,
+): Promise<UseCaseResponse> {
+  return request(`/admin/${tenantId}/use-cases/${useCaseId}`);
+}
+
+export function createUseCase(
+  tenantId: string,
+  payload: {
+    name: string;
+    description?: string;
+    status?: 'draft' | 'active';
+    triggers?: string[];
+    steps?: UseCaseStepResponse[];
+  },
+): Promise<UseCaseResponse> {
+  return request(`/admin/${tenantId}/use-cases`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateUseCase(
+  tenantId: string,
+  useCaseId: string,
+  payload: {
+    name?: string;
+    description?: string;
+    status?: 'draft' | 'active';
+    triggers?: string[];
+    steps?: UseCaseStepResponse[];
+  },
+): Promise<UseCaseResponse> {
+  return request(`/admin/${tenantId}/use-cases/${useCaseId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteUseCase(
+  tenantId: string,
+  useCaseId: string,
+): Promise<{ ok: boolean }> {
+  return request(`/admin/${tenantId}/use-cases/${useCaseId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function runUseCase(
+  tenantId: string,
+  useCaseId: string,
+): Promise<UseCaseRunResponse> {
+  return request(`/admin/${tenantId}/use-cases/${useCaseId}/run`, {
+    method: 'POST',
+  });
+}
+
+// --- Use Case Runs ---
+
+export interface ToolCallRecordResponse {
+  name: string;
+  status: 'completed' | 'failed' | 'not_implemented';
+  latency_ms: number;
+  request: Record<string, unknown> | null;
+  response: Record<string, unknown> | null;
+}
+
+export interface UseCaseRunStepResponse {
+  step_index: number;
+  skill_id: string;
+  skill_name: string;
+  model: string;
+  tools: string[];
+  instructions: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  latency_ms: number | null;
+  tokens: number;
+  result_summary: string;
+  tool_request_payload: Record<string, unknown> | null;
+  tool_response: Record<string, unknown> | null;
+  tool_calls: ToolCallRecordResponse[];
+  llm_output: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface UseCaseRunResponse {
+  run_id: string;
+  tenant_id: string;
+  use_case_id: string;
+  use_case_name: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  steps: UseCaseRunStepResponse[];
+  total_latency_ms: number;
+  total_tokens: number;
+  final_result: string;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export function getUseCaseRuns(
+  tenantId: string,
+  useCaseId: string,
+): Promise<UseCaseRunResponse[]> {
+  return request(`/admin/${tenantId}/use-cases/${useCaseId}/runs`);
+}
+
+export function getUseCaseRun(
+  tenantId: string,
+  useCaseId: string,
+  runId: string,
+): Promise<UseCaseRunResponse> {
+  return request(`/admin/${tenantId}/use-cases/${useCaseId}/runs/${runId}`);
+}
+
+export function getAllUCRuns(
+  tenantId: string,
+): Promise<UseCaseRunResponse[]> {
+  return request(`/admin/${tenantId}/uc-runs`);
+}
+
+export function getUCRun(
+  tenantId: string,
+  runId: string,
+): Promise<UseCaseRunResponse> {
+  return request(`/admin/${tenantId}/uc-runs/${runId}`);
+}
+
+export function connectUCRunEvents(
+  tenantId: string,
+  runId: string,
+  onStepCompleted: (step: UseCaseRunStepResponse, runStatus: string) => void,
+  onRunCompleted: (run: UseCaseRunResponse) => void,
+  onRunCancelled?: (run: UseCaseRunResponse) => void,
+): EventSource {
+  const url = `/api/admin/${tenantId}/uc-runs/${runId}/events`;
+  const es = new EventSource(url);
+  es.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
+    if (data.type === 'step.completed') {
+      onStepCompleted(data.step, data.run_status);
+    } else if (data.type === 'run.cancelled') {
+      onRunCancelled?.(data.run);
+      es.close();
+    } else if (data.type === 'run.completed') {
+      onRunCompleted(data.run);
+      es.close();
+    }
+  };
+  es.onerror = () => {
+    es.close();
+  };
+  return es;
+}
+
+export function cancelUCRun(
+  tenantId: string,
+  runId: string,
+): Promise<{ ok: boolean }> {
+  return request(`/admin/${tenantId}/uc-runs/${runId}/cancel`, {
+    method: 'POST',
+  });
+}
+
+// --- Agent Ask ---
+
+export interface AgentAskResponse {
+  reasoning: string[];
+  use_case: string;
+  skills: string[];
+  tools: string[];
+  result: string;
+}
+
+export function askAgent(
+  tenantId: string,
+  prompt: string,
+): Promise<AgentAskResponse> {
+  return request(`/admin/${tenantId}/agent/ask`, {
+    method: 'POST',
+    body: JSON.stringify({ prompt }),
+  });
 }
 
 // --- ServiceNow Preview + Approve ---

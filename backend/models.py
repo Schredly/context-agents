@@ -47,6 +47,23 @@ class ServiceNowConfig(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class LLMConfig(BaseModel):
+    id: str
+    label: str
+    provider: str          # "anthropic", "openai", etc.
+    api_key: str
+    model: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TenantLLMAssignment(BaseModel):
+    tenant_id: str
+    llm_config_id: str
+    is_active: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 # --- Request models ---
 
 
@@ -67,6 +84,30 @@ class PutServiceNowConfigRequest(BaseModel):
     instance_url: str
     username: str
     password: str
+
+
+class CreateLLMConfigRequest(BaseModel):
+    label: str
+    provider: str
+    api_key: str
+    model: str
+
+
+class UpdateLLMConfigRequest(BaseModel):
+    label: Optional[str] = None
+    provider: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+
+
+class AssignLLMConfigRequest(BaseModel):
+    llm_config_id: str
+
+
+class TestLLMConfigRequest(BaseModel):
+    provider: str
+    api_key: str
+    model: str
 
 
 class ScaffoldResultRequest(BaseModel):
@@ -150,6 +191,16 @@ class WritebackApproveRequest(BaseModel):
     tenant_secret: str
     sys_id: str
     note_prefix: Optional[str] = None
+
+
+class SelectAnswerRequest(BaseModel):
+    tenant_id: str
+    selected: Literal["kb", "llm"]
+
+
+class SaveToDriveRequest(BaseModel):
+    tenant_id: str
+    access_token: str
 
 
 class AgentRun(BaseModel):
@@ -327,3 +378,183 @@ class ObservabilityTrendPoint(BaseModel):
 class ObservabilityTrendsResponse(BaseModel):
     last_7d: list[ObservabilityTrendPoint] = Field(default_factory=list)
     last_30d: list[ObservabilityTrendPoint] = Field(default_factory=list)
+
+
+# --- Integration models ---
+
+
+INTEGRATION_CATALOG = {
+    "servicenow": {"name": "ServiceNow", "description": "IT service management platform", "config_fields": ["instance_url", "username", "password"]},
+    "google-drive": {"name": "Google Drive", "description": "Cloud storage and file sharing", "config_fields": ["root_folder_id", "folder_name"]},
+    "salesforce": {"name": "Salesforce", "description": "Customer relationship management", "config_fields": ["instance_url", "username", "password"]},
+    "slack": {"name": "Slack", "description": "Team communication platform", "config_fields": ["webhook_url"]},
+    "github": {"name": "GitHub", "description": "Code repository and collaboration", "config_fields": ["token", "org"]},
+    "jira": {"name": "Jira", "description": "Project tracking and management", "config_fields": ["instance_url", "username", "api_token"]},
+}
+
+
+class Integration(BaseModel):
+    id: str
+    tenant_id: str
+    integration_type: str
+    enabled: bool = False
+    config: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CreateIntegrationRequest(BaseModel):
+    integration_type: str
+
+
+class UpdateIntegrationConfigRequest(BaseModel):
+    config: dict[str, Any]
+
+
+class TestIntegrationRequest(BaseModel):
+    integration_type: str
+    config: dict[str, Any]
+
+
+# --- Tool Catalog ---
+
+
+TOOL_CATALOG = [
+    # ServiceNow
+    {"tool_id": "servicenow.search_incidents", "integration_type": "servicenow", "name": "Search Incidents", "description": "Search ServiceNow incident records", "input_schema": {"query": "string", "limit": "integer"}, "output_schema": {"incidents": "array"}},
+    {"tool_id": "servicenow.get_incident_details", "integration_type": "servicenow", "name": "Get Incident Details", "description": "Retrieve details for a specific ServiceNow incident", "input_schema": {"sys_id": "string"}, "output_schema": {"incident": "object"}},
+    {"tool_id": "servicenow.search_kb", "integration_type": "servicenow", "name": "Search Knowledge Base", "description": "Search ServiceNow knowledge base articles", "input_schema": {"query": "string", "limit": "integer"}, "output_schema": {"articles": "array"}},
+    {"tool_id": "servicenow.add_work_note", "integration_type": "servicenow", "name": "Add Work Note", "description": "Add a work note to a ServiceNow record", "input_schema": {"sys_id": "string", "note": "string"}, "output_schema": {"ok": "boolean"}},
+    # Google Drive
+    {"tool_id": "google-drive.search_documents", "integration_type": "google-drive", "name": "Search Documents", "description": "Search Google Drive for documents", "input_schema": {"query": "string", "folder_id": "string"}, "output_schema": {"files": "array"}},
+    {"tool_id": "google-drive.read_file", "integration_type": "google-drive", "name": "Read File", "description": "Read content of a Google Drive file", "input_schema": {"file_id": "string"}, "output_schema": {"content": "string"}},
+    {"tool_id": "google-drive.create_file", "integration_type": "google-drive", "name": "Create File", "description": "Create a new file in Google Drive", "input_schema": {"name": "string", "content": "string", "folder_id": "string"}, "output_schema": {"file_id": "string"}},
+    # Salesforce
+    {"tool_id": "salesforce.search_accounts", "integration_type": "salesforce", "name": "Search Accounts", "description": "Search Salesforce accounts", "input_schema": {"query": "string"}, "output_schema": {"accounts": "array"}},
+    {"tool_id": "salesforce.get_case_history", "integration_type": "salesforce", "name": "Get Case History", "description": "Retrieve case history for a Salesforce account", "input_schema": {"account_id": "string"}, "output_schema": {"cases": "array"}},
+    # Slack
+    {"tool_id": "slack.send_message", "integration_type": "slack", "name": "Send Message", "description": "Send a message to a Slack channel", "input_schema": {"channel": "string", "text": "string"}, "output_schema": {"ok": "boolean", "ts": "string"}},
+    {"tool_id": "slack.search_messages", "integration_type": "slack", "name": "Search Messages", "description": "Search Slack messages", "input_schema": {"query": "string"}, "output_schema": {"messages": "array"}},
+    # GitHub
+    {"tool_id": "github.search_commits", "integration_type": "github", "name": "Search Commits", "description": "Search GitHub commits", "input_schema": {"query": "string", "repo": "string"}, "output_schema": {"commits": "array"}},
+    {"tool_id": "github.search_issues", "integration_type": "github", "name": "Search Issues", "description": "Search GitHub issues and pull requests", "input_schema": {"query": "string", "repo": "string"}, "output_schema": {"issues": "array"}},
+    # Jira
+    {"tool_id": "jira.search_issues", "integration_type": "jira", "name": "Search Issues", "description": "Search Jira issues with JQL", "input_schema": {"jql": "string"}, "output_schema": {"issues": "array"}},
+    {"tool_id": "jira.get_issue", "integration_type": "jira", "name": "Get Issue", "description": "Get details for a specific Jira issue", "input_schema": {"issue_key": "string"}, "output_schema": {"issue": "object"}},
+]
+
+TOOL_CATALOG_BY_ID = {t["tool_id"]: t for t in TOOL_CATALOG}
+
+
+# --- Skill models ---
+
+
+class Skill(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    description: str = ""
+    model: str = ""
+    instructions: str = ""
+    tools: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CreateSkillRequest(BaseModel):
+    name: str
+    description: str = ""
+    model: str = ""
+    instructions: str = ""
+    tools: list[str] = Field(default_factory=list)
+
+
+class UpdateSkillRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    model: Optional[str] = None
+    instructions: Optional[str] = None
+    tools: Optional[list[str]] = None
+
+
+# --- Use Case models ---
+
+
+class UseCaseStep(BaseModel):
+    step_id: str
+    skill_id: str
+    name: str = ""
+    input_mapping: str = ""
+    output_mapping: str = ""
+
+
+class UseCase(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    description: str = ""
+    status: Literal["draft", "active"] = "draft"
+    triggers: list[str] = Field(default_factory=list)
+    steps: list[UseCaseStep] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CreateUseCaseRequest(BaseModel):
+    name: str
+    description: str = ""
+    status: Literal["draft", "active"] = "draft"
+    triggers: list[str] = Field(default_factory=list)
+    steps: list[UseCaseStep] = Field(default_factory=list)
+
+
+class UpdateUseCaseRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[Literal["draft", "active"]] = None
+    triggers: Optional[list[str]] = None
+    steps: Optional[list[UseCaseStep]] = None
+
+
+# --- Use Case Execution models ---
+
+
+class ToolCallRecord(BaseModel):
+    name: str
+    status: Literal["completed", "failed", "not_implemented"] = "completed"
+    latency_ms: int = 0
+    request: Optional[dict[str, Any]] = None
+    response: Optional[dict[str, Any]] = None
+
+
+class UseCaseRunStep(BaseModel):
+    step_index: int
+    skill_id: str
+    skill_name: str
+    model: str
+    tools: list[str] = Field(default_factory=list)
+    instructions: str = ""
+    status: Literal["pending", "running", "completed", "failed"] = "pending"
+    latency_ms: Optional[int] = None
+    tokens: int = 0
+    result_summary: str = ""
+    tool_request_payload: Optional[dict[str, Any]] = None
+    tool_response: Optional[dict[str, Any]] = None
+    tool_calls: list[ToolCallRecord] = Field(default_factory=list)
+    llm_output: str = ""
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class UseCaseRun(BaseModel):
+    run_id: str
+    tenant_id: str
+    use_case_id: str
+    use_case_name: str = ""
+    status: Literal["queued", "running", "completed", "failed", "cancelled"] = "queued"
+    steps: list[UseCaseRunStep] = Field(default_factory=list)
+    total_latency_ms: int = 0
+    total_tokens: int = 0
+    final_result: str = ""
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = None

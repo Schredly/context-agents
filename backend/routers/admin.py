@@ -8,6 +8,7 @@ from typing import Optional
 
 from models import (
     ActivateResponse,
+    AssignLLMConfigRequest,
     ClassificationSchema,
     DiagnosticFailureEvent,
     GoogleDriveConfig,
@@ -81,6 +82,43 @@ async def put_snow_config(
         username=body.username,
         password=body.password,
     )
+
+
+# --- Tenant LLM Assignments ---
+
+
+@router.get("/llm-assignments")
+async def list_llm_assignments(tenant_id: str, request: Request):
+    await _require_tenant(tenant_id, request)
+    return await request.app.state.llm_assignment_store.list_for_tenant(tenant_id)
+
+
+@router.post("/llm-assignments", status_code=201)
+async def assign_llm_config(tenant_id: str, body: AssignLLMConfigRequest, request: Request):
+    await _require_tenant(tenant_id, request)
+    # Verify the config exists
+    config = await request.app.state.llm_config_store.get(body.llm_config_id)
+    if config is None:
+        raise HTTPException(status_code=404, detail="LLM config not found")
+    return await request.app.state.llm_assignment_store.assign(tenant_id, body.llm_config_id)
+
+
+@router.delete("/llm-assignments/{config_id}")
+async def unassign_llm_config(tenant_id: str, config_id: str, request: Request):
+    await _require_tenant(tenant_id, request)
+    removed = await request.app.state.llm_assignment_store.unassign(tenant_id, config_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return {"ok": True}
+
+
+@router.put("/llm-assignments/{config_id}/activate")
+async def activate_llm_assignment(tenant_id: str, config_id: str, request: Request):
+    await _require_tenant(tenant_id, request)
+    assignment = await request.app.state.llm_assignment_store.set_active(tenant_id, config_id)
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return assignment
 
 
 # --- Google Drive Config ---
@@ -298,8 +336,9 @@ async def get_integration_diagnostics(tenant_id: str, request: Request):
     drive_config = await request.app.state.drive_config_store.get_by_tenant(tenant_id)
     drive_configured = drive_config is not None and bool(drive_config.root_folder_id)
 
-    # claude_configured
-    claude_configured = bool(os.environ.get("CLAUDE_API_KEY", ""))
+    # claude_configured — check tenant assignment or env var fallback
+    active_assignment = await request.app.state.llm_assignment_store.get_active(tenant_id)
+    claude_configured = active_assignment is not None or bool(os.environ.get("CLAUDE_API_KEY", ""))
 
     # servicenow_configured
     snow_config = await request.app.state.snow_config_store.get_by_tenant(tenant_id)

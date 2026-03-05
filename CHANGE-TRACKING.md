@@ -1415,3 +1415,691 @@ src/app/
 - The SkillTrace duplication between RunsPage and WorkerServiceNowPage could be extracted to a shared component in a future refactoring sprint if needed.
 
 *Next change will be #019.*
+
+---
+
+## #019 — 2026-03-03 — ServiceNow UI Action Documentation (PDF Deliverable)
+
+**What happened:**
+Generated a copy/paste-ready PDF documenting the ServiceNow-side configuration needed to launch the Agent worker popup from an Incident form. This is a documentation-only sprint — no application code changes. The PDF provides everything a ServiceNow admin needs to wire up the UI Action button that opens `/worker/servicenow`.
+
+**Deliverable:**
+- `Sprint_19_ServiceNow_UI_Action.pdf` — 6-page PDF generated via `generate_sprint19_pdf.py` (using fpdf2).
+
+**PDF contents:**
+
+1. **System Properties** — Three `x_agent.*` properties to create in ServiceNow (base_url, tenant_id, tenant_secret) with types, example values, role restrictions (itil read / admin write).
+
+2. **UI Action Record** — Full field-by-field configuration table for creating the "AI Resolution Assistant" button on the incident table. Key settings: Client=true, Form button=true, Show insert=false, Show update=true, Condition=`current.state != 7`, Roles=itil, Onclick=`aiResolutionAssistant()`.
+
+3. **UI Action Script** — Complete `aiResolutionAssistant()` function that:
+   - Reads config from `gel()` hidden fields (UI16) with fallback to `window._agent*` globals (Next Experience)
+   - Validates config is present, shows `g_form.addErrorMessage()` if missing
+   - Reads incident fields via `g_form`: sys_id, number, short_description (required), category, subcategory, business_service, description (optional, truncated to 2000 chars)
+   - Uses `getDisplayValue()` for category/subcategory/business_service (friendlier strings)
+   - Builds URL with `encodeURIComponent` for all params
+   - Opens centered popup window (540x720, resizable, scrollbars)
+
+4. **Companion Client Script (onLoad)** — `onLoad` Client Script on incident table that uses `GlideAjax` to call `AgentConfigAjax` Script Include, parses the JSON response, and sets `window._agentBaseUrl`, `window._agentTenantId`, `window._agentTenantSec` globals.
+
+5. **Companion Script Include** — `AgentConfigAjax` extending `AbstractAjaxProcessor`, marked Client callable. Single method `getAgentConfig()` returns JSON with the three `gs.getProperty()` values.
+
+6. **UI16 + Next Experience Compatibility** — Reference table documenting API availability across UI16 (Classic) and Next Experience (Polaris): g_form, window.open(), GlideModal, GlideAjax, gel(), getDisplayValue(), description truncation, popup blocker behavior.
+
+7. **Field Mapping Table** — Maps each URL query parameter to its ServiceNow source (g_form call or sys_property via GlideAjax) with required/optional notes.
+
+8. **Testing Checklist** — Grouped into Setup (8 items), UI Action Visibility (4 items), Popup Launch (5 items), Error Handling (2 items), End-to-End Flow (7 items), Cross-Experience (2 items).
+
+**Note on scope:** The original sprint spec called for an MVP approach with hardcoded tenant_id/tenant_secret in the UI Action script. The delivered PDF instead documents the production-grade sys_properties + GlideAjax approach. A follow-up may provide a simplified hardcoded-only script for first round-trip testing.
+
+**Files created (not committed to repo):**
+- `generate_sprint19_pdf.py` — Python script using fpdf2 to generate the PDF
+- `Sprint_19_ServiceNow_UI_Action.pdf` — Generated 6-page PDF
+
+**Files NOT modified:**
+- No backend files changed
+- No frontend files changed
+- No configuration files changed
+
+**What GPT should know for next steps:**
+- The PDF is the deliverable — a ServiceNow admin uses it to configure the UI Action, Client Script, and Script Include.
+- The UI Action opens the same `/worker/servicenow` popup page built in Sprint 18.
+- The `gel()` + `window._agent*` fallback pattern handles both UI16 and Next Experience environments.
+- For quick first-time testing, the admin could skip the GlideAjax/Script Include setup and hardcode tenant_id/tenant_secret directly in the `aiResolutionAssistant()` function (replacing the `gel()` / `window._agent*` reads with literal strings).
+- The PDF was generated with fpdf2 core fonts (no Unicode support) — em dashes and special chars were replaced with ASCII equivalents.
+
+*Next change will be #019A.*
+
+## #019A — 2026-03-04 — Settings Page Tabbed Sub-Modules Redesign
+
+**What happened:**
+Full rewrite of `SettingsPage.tsx` from a single stacked-section layout into a two-tab design using Radix Tabs. The page no longer depends on the global tenant selector (`useTenants()`) — the Tenant Intelligence tab fetches its own tenant list independently. Both tabs use the same table styling as `TenantsPage.tsx` (white bg, gray-50 header, uppercase column headers, icon action buttons).
+
+**Files modified:**
+
+- `src/app/pages/SettingsPage.tsx` — **Complete rewrite.** Key changes:
+
+  **Removed dependencies:**
+  - `useTenants()` from `../context/TenantContext` — no longer imported or used
+  - `Radio`, `Link`, `Unlink` icons — no longer needed
+
+  **Added imports:**
+  - `Tabs, TabsList, TabsTrigger, TabsContent` from `../components/ui/tabs`
+  - `getTenants, type TenantResponse` from `../services/api`
+  - `ChevronDown, ChevronRight` from `lucide-react`
+  - `Fragment` from `react`
+
+  **Layout:**
+  - Page container changed from `max-w-2xl` to `max-w-7xl mx-auto` to match Tenants page width
+  - Page header: "Settings" (text-2xl) with subtitle, matching Tenants page header style
+  - Two Radix tabs: **LLM Setup** (default) and **Tenant Intelligence**
+
+  **Tab 1 — LLM Setup:**
+  - "Add" button upper-right (same style as Tenants page "Create Tenant" button)
+  - **Table** with columns: LABEL | PROVIDER | MODEL | API KEY (masked) | ACTIONS
+  - Table classes match TenantsPage: `bg-white border border-border rounded-lg`, `bg-gray-50` thead, `divide-y divide-border` tbody
+  - Pencil icon (`p-2 hover:bg-gray-100 rounded`) opens inline edit form in a `colSpan={5}` table row
+  - Trash icon (`p-2 hover:bg-red-50 rounded text-red-600`) triggers immediate delete
+  - Inline form card: Label, Provider select, API Key with show/hide toggle, Model select, Test + Save + Cancel buttons with status feedback
+  - API Key input includes `autoComplete="off"` to prevent browser password manager from blocking paste
+  - Empty state: dashed border box with "No LLM configurations yet." and Add button
+
+  **Tab 2 — Tenant Intelligence:**
+  - Fetches tenant list via `getTenants()` on mount (independent of global tenant context)
+  - Loads tenant LLM assignments lazily when a tenant row is expanded (via `getTenantLLMAssignments()`)
+  - **Table** with columns: (chevron) | NAME | TENANT ID | STATUS (badge) | ASSIGNED LLMs (count)
+  - Clickable rows toggle expansion with chevron icons (`ChevronRight` / `ChevronDown`)
+  - Only one tenant expanded at a time — clicking another collapses the previous
+  - **Expanded row** (`colSpan={5}`, `bg-gray-50/50`): Shows all global LLM configs as cards with:
+    - **Checkbox** to assign/unassign the config to that tenant (`assignLLMConfig` / `unassignLLMConfig`)
+    - **Radio** button (scoped per tenant via `name={default-llm-${tenant.id}}`) to set the default (`activateLLMAssignment`)
+    - Event propagation stopped on checkbox/radio to prevent row toggle
+  - Empty state inside expansion: "No LLM configs available. Add one in the LLM Setup tab first."
+  - Tenant status badges use same styling as TenantsPage (green-100/green-800 for active, gray-100/gray-600 otherwise)
+  - Fallback note at bottom: "When no active assignment exists, the system falls back to the `CLAUDE_API_KEY` environment variable."
+
+  **State management:**
+  - `providers` and `configs` fetched once on mount (shared by both tabs)
+  - `tenants` and `tenantsLoading` — independent tenant list for Tab 2
+  - `expandedTenantId` — which tenant row is expanded (null = none)
+  - `assignmentsMap: Record<string, TenantLLMAssignmentResponse[]>` — keyed by tenant ID, lazily populated on expand
+  - `editingId` and `form` — LLM Setup inline form state (unchanged from previous impl)
+  - When an LLM config is deleted, `assignmentsMap` is cleaned across all tenants (removes stale references)
+
+**Files NOT modified:**
+- No route changes (`routes.tsx` unchanged) — Settings page is still at `/settings`
+- No sidebar changes (`Sidebar.tsx` unchanged)
+- No API changes (`api.ts` unchanged) — all API functions already existed
+- No backend changes
+- No new dependencies added
+
+**Key architecture decisions:**
+- **Independent tenant fetch** — Tab 2 calls `getTenants()` directly instead of relying on `useTenants()`. This decouples Settings from the global tenant selector in TopBar. Users can manage assignments for any tenant without switching the global selector.
+- **Lazy assignment loading** — Assignments are fetched per-tenant only when expanded, not upfront for all tenants. Results are cached in `assignmentsMap` so re-expanding a tenant doesn't re-fetch.
+- **Single-expansion accordion** — Only one tenant row can be expanded at a time. This prevents layout complexity and keeps the table scannable.
+- **Per-tenant radio scoping** — Radio buttons use `name={default-llm-${tenant.id}}` so each tenant's default selection is independent. The old implementation used a single `name="default-llm"` which only worked because it only showed one tenant at a time.
+- **Form rendered as table row** — The inline edit form is rendered in a `<td colSpan={5}>` row within the table, keeping the table structure valid and the form contextually positioned below the header / above the row being edited.
+- **autoComplete="off" on API Key input** — Prevents browser password manager from intercepting the field, which was blocking paste on Safari.
+
+**What GPT should know for next steps:**
+- The Settings page is now fully self-contained — it doesn't depend on `useTenants()` or `currentTenantId` from the global context.
+- Both tabs share `providers` and `configs` state so adding a config in Tab 1 immediately appears in Tab 2's expansion panels.
+- The `assignmentsMap` is a cache — if the user assigns/unassigns LLMs, the map is updated optimistically from the API response without re-fetching.
+- The table styling in both tabs exactly matches `TenantsPage.tsx` patterns: same header classes, same hover states, same icon button patterns.
+- No new API endpoints were needed — all functions (`getTenants`, `getTenantLLMAssignments`, `assignLLMConfig`, `unassignLLMConfig`, `activateLLMAssignment`) already existed in `api.ts`.
+
+## #020 — 2026-03-04 — UI Structural Refactor: General-Purpose Control Plane Navigation
+
+**What happened:**
+Refactored the UI from a ServiceNow-specific 4-item sidebar into a general-purpose AI Agent Control Plane with 7 sidebar items. Added new mock-data pages for Integrations, Skills, Use Cases, and Agent Console. Replaced `Sidebar.tsx` + `DashboardLayout.tsx` with a single `Layout.tsx` component. Removed the ServiceNow-specific Setup Wizard — tenant creation is now a standalone flow, and integration configuration lives in the new Integrations module. This is a structural refactor only — existing providers, API connections, design system, and the standalone `/worker/servicenow` route are all preserved.
+
+**Files created:**
+
+- `src/app/components/Layout.tsx` — Replaces both `Sidebar.tsx` and `DashboardLayout.tsx`. Contains sidebar with 7 nav items (Tenants, Integrations, Skills, Use Cases, Runs, Observability, Settings), `TopBar`, `Toaster`, and `<Outlet />`. Uses named export `Layout()` matching codebase convention. Icons: `Building2`, `Plug`, `Sparkles`, `Workflow`, `PlayCircle`, `Activity`, `Settings` from lucide-react. Active item styling: `bg-gray-200 text-gray-900 font-medium`. Sidebar width: `w-60`.
+
+- `src/app/pages/IntegrationsPage.tsx` — Grid of integration cards (ServiceNow, Google Drive, Salesforce, Slack, GitHub, Jira). Each card shows name, description, icon, and connection status badge (green "Connected" or gray "Not Connected"). Cards link to `/integrations/:id`. Header: "Integrations — Connect external systems for this tenant." Primary button: "Add Integration".
+
+- `src/app/pages/IntegrationConfigPage.tsx` — Configuration form for a single integration. Fields: Instance URL, Username, Password/OAuth Token. Buttons: "Test Connection" (simulates 1.5s test with spinner → success badge) and "Enable Integration" (enabled only after successful test). Back link to `/integrations`. Integration name resolved from URL param `:id`.
+
+- `src/app/pages/SkillsPage.tsx` — Table of reusable AI capabilities. Columns: NAME, DESCRIPTION, TOOLS (monospace badges, max 2 shown + overflow count), MODEL, LAST UPDATED, ACTIONS (edit pencil, delete trash, more menu). Mock data: Knowledge Search, Incident Diagnosis, Customer Email Writer, Root Cause Analysis. Primary button: "Create Skill" linking to `/skills/create`.
+
+- `src/app/pages/SkillEditorPage.tsx` — Two-column skill editor. Left column: Skill Name, Description, Model dropdown (Claude 3.5 Sonnet / GPT-4 / GPT-4 Turbo / Gemini Pro), Allowed Tools checklist (9 tools from ServiceNow, GoogleDrive, Salesforce, Slack, GitHub). Right column: Instructions textarea (20 rows, monospace). Cancel + Save buttons. Handles both create (`/skills/create`) and edit (`/skills/:id`) modes based on URL param presence.
+
+- `src/app/pages/UseCasesPage.tsx` — Table of workflow templates. Columns: NAME, DESCRIPTION, SKILLS (blue badges, max 2 + overflow), TRIGGERS, STATUS (green "Active" / gray "Draft"), ACTIONS. Mock data: IT Incident Resolution, Customer Support Automation, Sales Lead Research. Primary button: "Create Use Case" linking to `/use-cases/create`.
+
+- `src/app/pages/UseCaseBuilderPage.tsx` — Visual workflow builder. Main area: horizontal step cards connected by arrow icons (Classify Ticket → Search Knowledge → Analyze Root Cause → Generate Response). Each step card shows step number, skill name, skill ID, and settings icon. Clicking a step selects it. Right panel: step configuration with skill selector dropdown, input mapping textarea, output mapping textarea. "Add Step" dashed button at end of chain. Cancel + Save buttons.
+
+- `src/app/pages/AgentConsolePage.tsx` — Two-panel agent interface. Left (2/3 width): chat-style interface with message bubbles (user = dark bg right-aligned, assistant = light bg left-aligned), processing spinner, input field with send button, quick action chips ("Investigate Incident", "Analyze Email Thread", "Search Knowledge"). Right (1/3 width): execution trace panel showing skills used (blue badges), tools called (monospace gray badges), latency, and token count. Mock response simulates 2s processing delay.
+
+- `src/app/pages/RunDetailPage.tsx` — Drill-down view for a single run. Header: run ID (monospace) + status badge. Metadata cards: Tenant, Duration, Total Tokens, Created. Execution timeline: vertical step list with green checkmark indicators, timeline connectors, step type badges (blue "Skill" / purple "Tool"), latency, token count, start/end times, and result text. Back link to `/runs`.
+
+- `src/app/pages/CreateTenantPage.tsx` — Multi-step tenant creation wizard. 4-step progress bar: Create Tenant → Add Integrations → Enable Use Cases → Activate. Step 1: form with Tenant Name, Tenant ID, Status dropdown. Steps 2-3: placeholder content for integration/use-case selection. Step 4: green "Ready to Activate" confirmation. Back/Continue navigation between steps. No ServiceNow-specific configuration — integrations are configured separately via the Integrations module.
+
+**Files modified:**
+
+- `src/app/routes.tsx` — **Major rewrite.** Imports `Layout` from `./components/Layout` instead of `DashboardLayout` from `./layouts/DashboardLayout`. Root `Component` changed from `DashboardLayout` to `Layout`. New page imports use default imports (new pages) alongside existing named imports (preserved pages). Added routes: `/tenants/create`, `/integrations`, `/integrations/:id`, `/skills`, `/skills/create`, `/skills/:id`, `/use-cases`, `/use-cases/create`, `/use-cases/:id`, `/runs/:id`, `/observability`, `/console`. Removed routes: `/tenants/setup`, `/tenants/setup/:id`, `/test-harness`, `/admin/observability`. Changed observability path from `/admin/observability` to `/observability`. Standalone `/worker/servicenow` route preserved unchanged.
+
+- `src/app/pages/TenantsPage.tsx` — Changed "Create Tenant" button navigation from `/tenants/setup` to `/tenants/create`. Changed per-tenant settings button navigation from `/tenants/setup/${tenant.id}` to `/tenants/create`. No other changes — table structure, API calls, and TenantContext usage all preserved.
+
+**Files deleted:**
+
+- `src/app/components/Sidebar.tsx` — Replaced by sidebar section within `Layout.tsx`.
+- `src/app/layouts/DashboardLayout.tsx` — Replaced by `Layout.tsx` which combines sidebar + main content area.
+- `src/app/pages/SetupWizardPage.tsx` — 6-step ServiceNow-specific wizard removed. Tenant creation is now handled by `CreateTenantPage.tsx` (general-purpose). Integration configuration is handled by the Integrations module.
+- `src/app/pages/TestHarnessPage.tsx` — Removed from navigation and routes.
+
+**Files NOT modified:**
+- `src/app/App.tsx` — `GoogleAuthProvider` and `TenantProvider` wrappers preserved. `RouterProvider` still renders the exported `router`.
+- `src/app/pages/RunsPage.tsx` — Live API connections and dual-answer card logic preserved.
+- `src/app/pages/ObservabilityPage.tsx` — Live charts preserved. Only the route path changed (in `routes.tsx`), component unchanged.
+- `src/app/pages/SettingsPage.tsx` — Tabbed LLM Setup / Tenant Intelligence preserved.
+- `src/app/pages/WorkerServiceNowPage.tsx` — Standalone worker page preserved at `/worker/servicenow`.
+- `src/app/services/api.ts` — No API changes.
+- `src/app/context/*` — All providers unchanged.
+- `src/app/components/TopBar.tsx` — Unchanged, now imported by `Layout.tsx` instead of `DashboardLayout.tsx`.
+- `src/app/components/ui/*` — All shadcn/ui components unchanged.
+
+**Key architecture decisions:**
+- **Layout.tsx replaces two files** — Sidebar was only used in DashboardLayout, so merging them into a single `Layout.tsx` component eliminates an unnecessary abstraction layer. The sidebar is now an `<aside>` element within the layout.
+- **Named export convention** — `Layout.tsx` uses `export function Layout()` (not default export) to match the existing codebase pattern where all components use named exports.
+- **New pages use default exports** — The 9 new pages from the refactored source use `export default function`. This is intentional — they're imported with default import syntax in `routes.tsx` while existing pages keep their named imports.
+- **Tenants href changed to `/tenants`** — The refactored source had Tenants pointing to `/` with special `isActive` logic. Changed to `/tenants` to match the existing routing pattern where `/` redirects to `/tenants`.
+- **No ServiceNow coupling in tenant creation** — `CreateTenantPage.tsx` is a general 4-step flow (Create → Integrations → Use Cases → Activate) with no ServiceNow-specific fields. The old `SetupWizardPage.tsx` had 6 steps including ServiceNow config, schema, and Drive scaffold — all of that now lives in the Integrations module.
+- **Mock data only for new pages** — All new pages use hardcoded mock data. Existing pages (Runs, Observability, Settings, Tenants) retain their live API connections unchanged.
+- **Observability route simplified** — Changed from `/admin/observability` to `/observability` to match the flat navigation structure.
+
+**Current sidebar navigation (7 items):**
+```
+Tenants        (Building2)    → /tenants
+Integrations   (Plug)         → /integrations
+Skills         (Sparkles)     → /skills
+Use Cases      (Workflow)     → /use-cases
+Runs           (PlayCircle)   → /runs
+Observability  (Activity)     → /observability
+Settings       (Settings)     → /settings
+```
+
+**Current route map:**
+```
+/                        → redirect to /tenants
+/tenants                 → TenantsPage (live API)
+/tenants/create          → CreateTenantPage (mock)
+/integrations            → IntegrationsPage (mock)
+/integrations/:id        → IntegrationConfigPage (mock)
+/skills                  → SkillsPage (mock)
+/skills/create           → SkillEditorPage (mock)
+/skills/:id              → SkillEditorPage (mock)
+/use-cases               → UseCasesPage (mock)
+/use-cases/create        → UseCaseBuilderPage (mock)
+/use-cases/:id           → UseCaseBuilderPage (mock)
+/runs                    → RunsPage (live API)
+/runs/:id                → RunDetailPage (mock)
+/observability           → ObservabilityPage (live API)
+/console                 → AgentConsolePage (mock)
+/settings                → SettingsPage (live API)
+/worker/servicenow       → WorkerServiceNowPage (standalone, live API)
+```
+
+**What GPT should know for next steps:**
+- The platform is now a general-purpose AI agent control plane, no longer ServiceNow-specific.
+- All new pages are mock-data placeholders ready to be wired to backend APIs.
+- The Integrations module is where external system configuration will live — each integration type will need its own config schema and connection test logic on the backend.
+- The Skills module will need backend CRUD endpoints and a way to associate tools from connected integrations.
+- The Use Cases module will need a workflow execution engine on the backend that chains skills together.
+- The Agent Console will need a WebSocket or SSE connection to stream execution traces in real-time.
+- The Run Detail page (`/runs/:id`) currently shows mock data — it should be wired to the existing runs API with the trace/step data from the orchestrator.
+- The `CreateTenantPage` navigates to `/` on completion — this should be updated to call the existing `createTenant` API and navigate to `/tenants` on success.
+- `npx tsc --noEmit` passes clean with all changes.
+
+*Next change will be #021.*
+
+---
+
+## #021 — 2026-03-04 — Integrations Module Backend + Frontend Wiring
+
+**What happened:**
+Built the full backend API for integrations and wired the frontend Integrations pages to real data. The new integrations router uses a unified wrapper approach — it reads from existing config stores (`snow_config_store`, `drive_config_store`) for ServiceNow/Google Drive hydration, and a new `IntegrationStore` for per-tenant CRUD, enable/disable state, and future integration types. Existing admin config endpoints remain untouched.
+
+**Files created:**
+
+- `backend/routers/integrations.py` — New router at `/api/admin/{tenant_id}/integrations` with 10 endpoints:
+  - `GET /catalog` — Returns static `INTEGRATION_CATALOG` (6 types: servicenow, google-drive, salesforce, slack, github, jira).
+  - `GET /` — Lists integrations for tenant. Hydrates `connection_status` from `snow_config_store`/`drive_config_store` for ServiceNow/Google Drive; derives status from `config` + `enabled` for other types.
+  - `POST /` — Creates integration record. Validates type against catalog. Returns 409 if type already exists for tenant. Generates `int_` prefixed IDs.
+  - `GET /{integration_id}` — Single integration with hydrated connection status.
+  - `PUT /{integration_id}/config` — Updates config fields. Syncs to `snow_config_store` for ServiceNow and `drive_config_store` for Google Drive.
+  - `PUT /{integration_id}/enable` — Sets `enabled=True`.
+  - `PUT /{integration_id}/disable` — Sets `enabled=False`.
+  - `POST /{integration_id}/test` — Tests connection. For ServiceNow, makes real HTTP call to `{instance_url}/api/now/table/incident?sysparm_limit=1` with basic auth via `httpx`. For other types, returns mock success.
+  - `DELETE /{integration_id}` — Deletes integration record.
+  - Uses `_require_tenant` pattern from admin router. Helper functions `_connection_status()` and `_serialize()` handle hydration and response formatting.
+
+**Files modified:**
+
+- `backend/models.py` — Added `INTEGRATION_CATALOG` dict (6 integration types with name, description, config_fields), `Integration` model (id, tenant_id, integration_type, enabled, config dict, timestamps), `CreateIntegrationRequest`, `UpdateIntegrationConfigRequest`, `TestIntegrationRequest`.
+
+- `backend/store/interface.py` — Added `IntegrationStore` ABC with 6 abstract methods: `create`, `get`, `list_for_tenant`, `update`, `delete`, `get_by_type`. Added `Integration` to imports.
+
+- `backend/store/memory.py` — Added `InMemoryIntegrationStore` implementation. Uses `dict[str, Integration]` keyed by ID. `list_for_tenant` filters by tenant_id. `get_by_type` filters by tenant_id + integration_type. `update` uses same `model_dump()` / merge pattern as existing stores.
+
+- `backend/store/__init__.py` — Added `IntegrationStore` and `InMemoryIntegrationStore` to imports and `__all__`.
+
+- `backend/main.py` — Added `InMemoryIntegrationStore` import, `app.state.integration_store = InMemoryIntegrationStore()`, imported and registered `integrations_router`.
+
+- `backend/routers/__init__.py` — Added `from routers.integrations import router as integrations_router` and exported it in `__all__`.
+
+- `src/app/services/api.ts` — Added `IntegrationResponse` interface (id, tenant_id, integration_type, enabled, config, connection_status, timestamps), `IntegrationCatalogEntry` interface (name, description, config_fields), and 9 API functions: `getIntegrationCatalog`, `getIntegrations`, `getIntegration`, `createIntegration`, `updateIntegrationConfig`, `enableIntegration`, `disableIntegration`, `testIntegration`, `deleteIntegration`.
+
+- `src/app/pages/IntegrationsPage.tsx` — Replaced hardcoded `integrations` array with live API data. Uses `useTenants()` for `currentTenantId`. Fetches integrations + catalog via `useEffect`/`useCallback` on mount and tenant change. Added loading spinner (Loader2 pattern), empty state with "Add Integration" CTA, and "no tenant selected" state. "Add Integration" button shows dropdown of catalog entries not yet added for the tenant, calls `createIntegration()` on selection and refetches. Card status badges derive from `integration.connection_status`. Card links use `integration.id` instead of hardcoded type slugs. Icon mapping: static `ICONS` record keyed by `integration_type`.
+
+- `src/app/pages/IntegrationConfigPage.tsx` — Replaced mock form with live API data. URL param `:id` now refers to the integration record ID. On mount: calls `getIntegration()` + `getIntegrationCatalog()` to load config and field definitions. Dynamic form fields rendered from `catalog[integration.integration_type].config_fields`. Field labels auto-formatted from snake_case. Secret fields (password, token, api_key, etc.) use `type="password"`. "Test Connection" saves config first via `updateIntegrationConfig()`, then calls `testIntegration()`. "Enable Integration" saves config, calls `enableIntegration()`, navigates to `/integrations`. Added loading state, not-found state, and toast notifications via sonner.
+
+**Files NOT modified:**
+- `src/app/App.tsx`, `src/app/routes.tsx`, `src/app/components/Layout.tsx` — No changes needed. Route param `:id` stays the same, just semantically refers to integration record ID now.
+- `src/app/pages/TenantsPage.tsx`, `src/app/pages/RunsPage.tsx`, `src/app/pages/ObservabilityPage.tsx`, `src/app/pages/SettingsPage.tsx`, `src/app/pages/WorkerServiceNowPage.tsx` — All preserved unchanged.
+- `backend/routers/admin.py` — Existing ServiceNow, Google Drive, and other admin endpoints remain intact.
+- `src/app/context/*`, `src/app/components/TopBar.tsx`, `src/app/components/ui/*` — All unchanged.
+
+**Key architecture decisions:**
+- **Unified wrapper approach** — The integrations router doesn't replace existing config endpoints. It wraps them by reading from `snow_config_store`/`drive_config_store` for hydration and syncing writes back to those stores. This means `/api/admin/{tenant_id}/servicenow` still works independently.
+- **Config sync on write** — When `PUT /{integration_id}/config` is called for a ServiceNow integration, the config is saved to both the integration store and `snow_config_store`. Same for Google Drive → `drive_config_store`. This ensures the orchestrator and worker pages that read from the original stores continue to work.
+- **Connection status hydration** — For ServiceNow/Google Drive, connection status is derived from whether the corresponding config store has data. For other types (salesforce, slack, github, jira), status is derived from `config` non-empty + `enabled=True`.
+- **Real HTTP test for ServiceNow** — Uses `httpx.AsyncClient` to make a live HTTP request to the ServiceNow instance. Other integration types return mock success for now.
+- **Dynamic form rendering** — The config page reads `config_fields` from the catalog to render the right inputs for each integration type, instead of hardcoding fields per type.
+
+**Current route map (updated):**
+```
+/integrations            → IntegrationsPage (live API)
+/integrations/:id        → IntegrationConfigPage (live API)
+```
+
+**What GPT should know for next steps:**
+- The Integrations module is now fully wired end-to-end: backend CRUD + frontend list/config pages.
+- The `INTEGRATION_CATALOG` in `backend/models.py` is the single source of truth for available integration types and their config field schemas.
+- To add a new integration type, add an entry to `INTEGRATION_CATALOG` and optionally add type-specific test logic in the router's `test_integration` endpoint.
+- The config sync pattern (integration store ↔ existing config stores) means the ServiceNow worker and Google Drive orchestrator continue to read from their original stores without modification.
+- Real connection tests for Salesforce, Slack, GitHub, and Jira are mocked — they'll need actual API calls when those integrations are implemented.
+- `npx tsc --noEmit` passes clean with all changes.
+
+*Next change will be #022.*
+
+---
+
+## #022 — 2026-03-04 — Tool Registry + Skills CRUD Backend + Frontend Wiring
+
+**What happened:**
+Added a static Tool Catalog (15 tools across 6 integration types) with a tenant-scoped "available tools" endpoint that filters by enabled/connected integrations. Built full Skills CRUD backend with store layer, and wired the frontend Skills pages (SkillsPage + SkillEditorPage) from mock data to live API. Tool IDs are validated against the catalog when creating or updating skills.
+
+**Files created:**
+
+- `backend/routers/tools.py` — New router at `/api/admin/{tenant_id}/tools` with 2 endpoints:
+  - `GET /catalog` — Returns full `TOOL_CATALOG` (15 tools) with `tools` array and `by_integration` grouping. Includes all tools regardless of tenant integration state.
+  - `GET /available` — Returns only tools whose `integration_type` maps to an integration that is **enabled** for the tenant. For ServiceNow, also requires `snow_config_store` to have data (hydrated "connected" status). For Google Drive, requires `drive_config_store` to have data. For other types (salesforce, slack, github, jira), `enabled=True` is sufficient. Response shape: `{ "tools": [...], "by_integration": { "servicenow": [...], ... } }`.
+  - Uses `_require_tenant` pattern. Uses `defaultdict` for grouping.
+
+- `backend/routers/skills.py` — New router at `/api/admin/{tenant_id}/skills` with 5 endpoints:
+  - `GET /` — Lists all skills for tenant.
+  - `POST /` — Creates skill with `sk_` prefixed ID. Validates `tools[]` against `TOOL_CATALOG_BY_ID`. Returns 400 with list of unknown tool IDs on validation failure.
+  - `GET /{skill_id}` — Returns single skill. 404 if not found or tenant mismatch.
+  - `PUT /{skill_id}` — Updates skill fields. Uses `model_dump(exclude_none=True)` so only provided fields are updated. Validates tools if included in update.
+  - `DELETE /{skill_id}` — Deletes skill. Returns `{"ok": true}`.
+  - All endpoints use `_require_tenant` pattern and verify `skill.tenant_id == tenant_id`.
+
+**Files modified:**
+
+- `backend/models.py` — Added `TOOL_CATALOG` list (15 tool entries) with fields: `tool_id`, `integration_type`, `name`, `description`, `input_schema`, `output_schema`. Tools per integration: ServiceNow (4: search_incidents, get_incident_details, search_kb, add_work_note), Google Drive (3: search_documents, read_file, create_file), Salesforce (2: search_accounts, get_case_history), Slack (2: send_message, search_messages), GitHub (2: search_commits, search_issues), Jira (2: search_issues, get_issue). Added `TOOL_CATALOG_BY_ID` dict for O(1) lookup. Added `Skill` model (id, tenant_id, name, description, model, instructions, tools list[str], timestamps). Added `CreateSkillRequest` and `UpdateSkillRequest` (all fields optional except name on create).
+
+- `backend/store/interface.py` — Added `Skill` to imports. Added `SkillStore` ABC with 5 abstract methods: `create`, `get`, `list_for_tenant`, `update`, `delete`.
+
+- `backend/store/memory.py` — Added `Skill` and `SkillStore` to imports. Added `InMemorySkillStore` implementation. Uses `dict[str, Skill]` keyed by ID. `list_for_tenant` filters by tenant_id. `update` uses same `model_dump()` / merge pattern as other stores.
+
+- `backend/store/__init__.py` — Added `SkillStore` and `InMemorySkillStore` to imports and `__all__`.
+
+- `backend/main.py` — Added `InMemorySkillStore` import, `app.state.skill_store = InMemorySkillStore()`. Added `skills_router` and `tools_router` to imports and `app.include_router()` calls.
+
+- `backend/routers/__init__.py` — Added `from routers.skills import router as skills_router` and `from routers.tools import router as tools_router`. Updated `__all__` to include both.
+
+- `src/app/services/api.ts` — Added `ToolCatalogEntry` interface (tool_id, integration_type, name, description, input_schema, output_schema). Added `ToolsResponse` interface (tools array + by_integration grouping). Added `SkillResponse` interface (id, tenant_id, name, description, model, instructions, tools, timestamps). Added 7 API functions: `getToolsCatalog`, `getAvailableTools`, `getSkills`, `getSkill`, `createSkill`, `updateSkill`, `deleteSkill`.
+
+- `src/app/pages/SkillsPage.tsx` — Replaced hardcoded `mockSkills` array with live API data. Uses `useTenants()` for `currentTenantId`. Fetches skills via `useEffect`/`useCallback` on mount and tenant change. Added loading spinner (Loader2), no-tenant state (AlertCircle), empty state with "Create Skill" CTA. Delete button calls `deleteSkill()` with confirmation dialog, then refetches. Table styling identical to original mock. "Last Updated" column uses `format(new Date(skill.updated_at), "MMM d, yyyy")` from date-fns. Tools column shows first 2 tool IDs as monospace badges + overflow count. Row name and edit icon both link to `/skills/:id`. Added `toast` imports from sonner.
+
+- `src/app/pages/SkillEditorPage.tsx` — Replaced hardcoded `availableTools` flat list with `getToolsCatalog()` grouped by integration type. Uses `useTenants()` for `currentTenantId`. On mount: fetches tool catalog. In edit mode (`:id` present): also fetches skill and populates form. Tools section renders with section headers per integration type using `INTEGRATION_LABELS` mapping, each tool showing `tool_id` (monospace) and description. Model dropdown values changed from `"claude"/"gpt4"` to `"claude-3.5-sonnet"/"gpt-4"/"gpt-4-turbo"/"gemini-pro"` with a "Select a model..." placeholder. Save button: calls `createSkill()` in create mode, `updateSkill()` in edit mode, navigates to `/skills` on success. Added toast notifications for success/error. Added loading state, saving state with disabled button + spinner. Empty tools state shows "No tools available. Add and enable integrations first." Two-column layout preserved unchanged.
+
+**Files NOT modified:**
+- `src/app/routes.tsx` — No route changes needed. `/skills`, `/skills/create`, `/skills/:id` already exist.
+- `src/app/App.tsx`, `src/app/components/Layout.tsx` — Unchanged.
+- `src/app/pages/RunsPage.tsx`, `src/app/pages/ObservabilityPage.tsx`, `src/app/pages/SettingsPage.tsx`, `src/app/pages/WorkerServiceNowPage.tsx` — All preserved unchanged.
+- `src/app/pages/IntegrationsPage.tsx`, `src/app/pages/IntegrationConfigPage.tsx` — Sprint #021 wiring preserved unchanged.
+- `backend/routers/admin.py`, `backend/routers/integrations.py` — Existing endpoints stay intact.
+- `src/app/context/*`, `src/app/components/TopBar.tsx`, `src/app/components/ui/*` — All unchanged.
+
+**Key architecture decisions:**
+- **Static tool catalog** — `TOOL_CATALOG` is a flat list in `models.py`, not a store. Tools are not tenant-specific — they represent capabilities of integration types. The `/available` endpoint filters dynamically based on tenant's enabled integrations.
+- **Tool ID format** — `{integration_type}.{action}` (e.g. `servicenow.search_kb`, `google-drive.read_file`). This matches the mock data naming convention and is human-readable.
+- **Catalog validation on skill save** — `_validate_tools()` checks all tool IDs against `TOOL_CATALOG_BY_ID`. This prevents referencing nonexistent tools. It does NOT enforce that the tools are "available" (i.e. integration enabled) — a skill can reference tools from integrations not yet connected. This is intentional: skills are reusable templates that may be configured before integrations are enabled.
+- **Skill editor uses full catalog** — The editor shows all tools from the catalog (not just available ones) so users can pre-configure skills. The `/available` endpoint exists for runtime filtering (e.g. when the orchestrator needs to know which tools a skill can actually use).
+- **Model values normalized** — Changed from display names (`"claude"`, `"gpt4"`) to stable identifiers (`"claude-3.5-sonnet"`, `"gpt-4"`) that match typical API model IDs.
+
+**Current route map (updated):**
+```
+/skills                  → SkillsPage (live API)
+/skills/create           → SkillEditorPage (live API, create mode)
+/skills/:id              → SkillEditorPage (live API, edit mode)
+```
+
+**What GPT should know for next steps:**
+- The Tool Catalog + Skills CRUD are now fully wired end-to-end.
+- `TOOL_CATALOG` in `backend/models.py` is the single source of truth for available tools. To add a new tool, append to the list.
+- Skills reference tools by `tool_id`. The orchestrator can use `GET /tools/available` at runtime to check which tools a skill can actually invoke for a given tenant.
+- The Use Cases module (next sprint candidate) can reference skills by `skill_id` and chain them into workflows.
+- The Agent Console can use skills + available tools to build execution plans.
+- `npx tsc --noEmit` passes clean with all changes.
+
+*Next change will be #023.*
+
+---
+
+## #023 — 2026-03-04 — Use Cases CRUD Backend + Frontend Wiring + Run Endpoint
+
+**What happened:**
+Built full Use Cases CRUD backend with store layer, a "Run Use Case" stub endpoint that builds an execution plan from use case steps, and wired the frontend Use Cases pages (UseCasesPage + UseCaseBuilderPage) from mock data to live API. Use case steps reference skills by `skill_id`, validated against the tenant's skill store on create/update.
+
+**Files created:**
+
+- `backend/routers/use_cases.py` — New router at `/api/admin/{tenant_id}/use-cases` with 6 endpoints:
+  - `GET /` — Lists all use cases for tenant.
+  - `POST /` — Creates use case with `uc_` prefixed ID. Validates `steps[].skill_id` against `skill_store` — each referenced skill must exist and belong to the tenant. Returns 400 if a skill is not found.
+  - `GET /{use_case_id}` — Returns single use case. 404 if not found or tenant mismatch.
+  - `PUT /{use_case_id}` — Updates use case fields. Uses `model_dump(exclude_none=True)` so only provided fields are updated. Validates steps if included. Converts `UseCaseStep` objects to dicts for storage merge.
+  - `DELETE /{use_case_id}` — Deletes use case. Returns `{"ok": true}`.
+  - `POST /{use_case_id}/run` — Stub execution endpoint. Loads the use case, builds an execution plan from steps by resolving each `skill_id` to get the skill's tools and model. Returns `{ run_id, use_case_id, status: "planned", message, plan: [...] }` where each plan entry has `step_index`, `skill_id`, `skill_name`, `tools`, `model`, `status: "pending"`. Does not create a real run record — runtime execution is deferred to a future sprint.
+  - All endpoints use `_require_tenant` pattern and verify `use_case.tenant_id == tenant_id`.
+  - Helper `_validate_steps()` checks all `skill_id` references.
+
+**Files modified:**
+
+- `backend/models.py` — Added `UseCaseStep` model (step_id, skill_id, name, input_mapping, output_mapping). Added `UseCase` model (id with `uc_` prefix, tenant_id, name, description, status as `"draft"|"active"`, triggers list[str], steps list[UseCaseStep], timestamps). Added `CreateUseCaseRequest` (name required, all else optional with defaults). Added `UpdateUseCaseRequest` (all fields optional).
+
+- `backend/store/interface.py` — Added `UseCase` to imports. Added `UseCaseStore` ABC with 5 abstract methods: `create`, `get`, `list_for_tenant`, `update`, `delete`.
+
+- `backend/store/memory.py` — Added `UseCase` and `UseCaseStore` to imports. Added `InMemoryUseCaseStore` implementation. Uses `dict[str, UseCase]` keyed by ID. Same `model_dump()` / merge pattern as other stores.
+
+- `backend/store/__init__.py` — Added `UseCaseStore` and `InMemoryUseCaseStore` to imports and `__all__`.
+
+- `backend/main.py` — Added `InMemoryUseCaseStore` import, `app.state.use_case_store = InMemoryUseCaseStore()`. Added `use_cases_router` to imports and `app.include_router()`.
+
+- `backend/routers/__init__.py` — Added `from routers.use_cases import router as use_cases_router`. Updated `__all__`.
+
+- `src/app/services/api.ts` — Added `UseCaseStepResponse` interface (step_id, skill_id, name, input_mapping, output_mapping). Added `UseCaseResponse` interface (id, tenant_id, name, description, status, triggers, steps, timestamps). Added `RunUseCaseResponse` interface (run_id, use_case_id, status, message, plan array). Added 7 API functions: `getUseCases`, `getUseCase`, `createUseCase`, `updateUseCase`, `deleteUseCase`, `runUseCase`.
+
+- `src/app/pages/UseCasesPage.tsx` — Replaced hardcoded `mockUseCases` array with live API data. Uses `useTenants()` for `currentTenantId`. Fetches use cases via `useEffect`/`useCallback` on mount and tenant change. Added loading spinner, no-tenant state, empty state with "Create Use Case" CTA. Delete button calls `deleteUseCase()` with confirmation dialog, then refetches. Skills column shows step names (falling back to `skill_id`) as blue badges with overflow count. Triggers column shows comma-joined triggers or em-dash if empty. Status column shows "Active" (green) or "Draft" (gray) badges from `useCase.status`. Table styling identical to original mock. Added `toast` imports from sonner.
+
+- `src/app/pages/UseCaseBuilderPage.tsx` — Major rewrite from mock to live API while preserving layout:
+  - **Name/Description/Status/Triggers bar** added above workflow area — 4-column grid with text inputs, status dropdown, and comma-separated triggers field.
+  - **Workflow steps** populated from use case steps in edit mode, empty in create mode. Each step card shows step number, skill name, skill_id, and a settings icon. Hover reveals a delete (trash) button per step.
+  - **Add Step** button creates a new step using the first available tenant skill. Shows toast error if no skills exist.
+  - **Step configuration panel** (right column): skill selector dropdown populated from live `getSkills()`, input mapping textarea, output mapping textarea. All changes update local state.
+  - **Save** calls `createUseCase()` in create mode, `updateUseCase()` in edit mode. Serializes workflow state to `UseCaseStepResponse[]` with step_id, skill_id, name, input_mapping, output_mapping.
+  - **Run button** (edit mode only): calls `runUseCase()`, shows toast with run_id on success. Disabled when no steps.
+  - Added loading state, saving/running states with spinners, toast notifications.
+  - Two-column layout (2/3 workflow + 1/3 config) preserved.
+
+**Files NOT modified:**
+- `src/app/routes.tsx` — No route changes. `/use-cases`, `/use-cases/create`, `/use-cases/:id` already exist.
+- `src/app/App.tsx`, `src/app/components/Layout.tsx` — Unchanged.
+- `src/app/pages/RunsPage.tsx`, `src/app/pages/ObservabilityPage.tsx`, `src/app/pages/SettingsPage.tsx`, `src/app/pages/WorkerServiceNowPage.tsx` — Preserved unchanged.
+- `src/app/pages/IntegrationsPage.tsx`, `src/app/pages/IntegrationConfigPage.tsx` — Sprint #021 wiring preserved.
+- `src/app/pages/SkillsPage.tsx`, `src/app/pages/SkillEditorPage.tsx` — Sprint #022 wiring preserved.
+- `backend/routers/admin.py`, `backend/routers/integrations.py`, `backend/routers/tools.py`, `backend/routers/skills.py` — All existing endpoints stay intact.
+
+**Key architecture decisions:**
+- **Steps reference skills by ID** — Each `UseCaseStep.skill_id` must exist in the tenant's skill store. This creates a dependency chain: Integrations → Tools → Skills → Use Cases.
+- **Step validation on save** — `_validate_steps()` checks that every referenced skill exists and belongs to the tenant. This prevents dangling references if a skill is deleted after being added to a use case.
+- **Run endpoint is a stub** — `POST /{use_case_id}/run` builds an execution plan by resolving each step's skill (tools, model) but does not create a real `AgentRun` record or invoke the orchestrator. It returns `status: "planned"` with the plan array. This gives the frontend something to display immediately while actual execution is implemented in a future sprint.
+- **Builder adds metadata fields** — The original mock had no name/description/triggers editing in the builder. Added a 4-column metadata bar above the workflow area for full CRUD — this was necessary since the backend model includes these fields and the create flow needs them.
+- **Triggers as comma-separated text** — Stored as `list[str]` on backend, entered as comma-separated in the UI. Parsed on save, joined on display.
+
+**Current route map (updated):**
+```
+/use-cases               → UseCasesPage (live API)
+/use-cases/create        → UseCaseBuilderPage (live API, create mode)
+/use-cases/:id           → UseCaseBuilderPage (live API, edit mode)
+```
+
+**What GPT should know for next steps:**
+- The full control plane CRUD chain is now complete: Integrations → Tools → Skills → Use Cases, all wired end-to-end.
+- The `POST /{use_case_id}/run` endpoint returns a plan but does not execute. The next step is implementing actual execution that creates an `AgentRun`, streams events via WebSocket, and invokes skills in sequence.
+- The Agent Console page is the last mock-data page remaining in the sidebar. It could be wired to use the run endpoint + WebSocket streaming.
+- The `CreateTenantPage` still uses mock wizard steps — could be wired to actually create integrations and use cases during tenant onboarding.
+- `npx tsc --noEmit` passes clean with all changes.
+
+*Next change will be #024.*
+
+---
+
+## #024 — 2026-03-04 — Agent Console + Runs + Observability + Real Execution Engine
+
+**What happened:**
+Implemented 4 Figma-designed pages (AgentConsolePage, RunDetailPage, RunsPage, ObservabilityPage) with live API wiring, plus a real execution engine that upgrades the `POST /use-cases/{id}/run` stub into background step-by-step execution with SSE streaming. Created 5 shared UI components from Figma designs. The entire execution → viewing → analysis flow now works end-to-end: run a use case from the Agent Console, watch steps complete in real-time via SSE, browse runs in the Runs table, drill into run details, and explore individual trace steps in the Observability trace explorer.
+
+**Files created:**
+
+- `src/app/components/StatusBadge.tsx` — Reusable status badge with 4 variants (completed=green, running=blue+spinner, pending=gray, failed=red). Configurable `size` (sm/md) and optional icon. Used across RunsPage, RunDetailPage, AgentConsolePage, ObservabilityPage, and TraceStep.
+
+- `src/app/components/TimelineConnector.tsx` — Vertical line connecting timeline steps. Positioned absolutely at left side, hidden when `isLast=true`.
+
+- `src/app/components/ToolInvocation.tsx` — Displays tool names as monospace code badges in a flex-wrap layout.
+
+- `src/app/components/RunCard.tsx` — Compact clickable card showing run ID, StatusBadge, use case name, duration, timestamp. Used in AgentConsolePage recent runs list.
+
+- `src/app/components/TraceStep.tsx` — Expandable timeline step card with: step number circle indicator, skill name + StatusBadge header, model/latency/tokens metrics, tools invoked section, result summary. Expanded view shows: skill instructions, tool request payload (JSON), tool response (JSON), LLM output. Uses TimelineConnector for vertical connection between steps.
+
+- `backend/routers/uc_runs.py` — New router at `/api/admin/{tenant_id}/uc-runs` with 3 endpoints:
+  - `GET /` — Lists all use-case runs for a tenant across all use cases. Sorted newest first.
+  - `GET /{run_id}` — Gets single run by ID with tenant validation.
+  - `GET /{run_id}/events` — SSE streaming endpoint. Polls the run store every 300ms, emits `step.completed` events as steps finish, then `run.completed` when terminal. Uses `StreamingResponse` with `text/event-stream` media type.
+
+**Files modified:**
+
+- `backend/models.py` — Added `UseCaseRunStep` model (step_index, skill_id, skill_name, model, tools, instructions, status, latency_ms, tokens, result_summary, tool_request_payload, tool_response, llm_output, started_at, completed_at). Added `UseCaseRun` model (run_id with `run_` prefix, tenant_id, use_case_id, use_case_name, status as `"queued"|"running"|"completed"|"failed"`, steps list, total_latency_ms, total_tokens, final_result, timestamps).
+
+- `backend/store/interface.py` — Added `UseCaseRun` to imports. Added `UseCaseRunStore` ABC with 5 abstract methods: `create`, `get`, `list_for_tenant`, `list_for_use_case`, `update`.
+
+- `backend/store/memory.py` — Added `UseCaseRun` and `UseCaseRunStore` to imports. Added `InMemoryUseCaseRunStore` implementation with dict keyed by `run_id`, tenant/use-case filtering.
+
+- `backend/store/__init__.py` — Added `UseCaseRunStore` and `InMemoryUseCaseRunStore` to imports and `__all__`.
+
+- `backend/main.py` — Added `InMemoryUseCaseRunStore` import, `app.state.use_case_run_store = InMemoryUseCaseRunStore()`. Added `uc_runs_router` to imports and `app.include_router()`. Backend now boots with 72 routes.
+
+- `backend/routers/__init__.py` — Added `from routers.uc_runs import router as uc_runs_router`. Updated `__all__`.
+
+- `backend/routers/use_cases.py` — Major upgrade to the run endpoint:
+  - `POST /{use_case_id}/run` — Now creates a real `UseCaseRun` record in the store, builds `UseCaseRunStep` entries from the use case's steps (resolving skill names, models, tools, instructions), then launches `_execute_run()` as an `asyncio.create_task` background task. Returns the full run object (status: "queued").
+  - `_execute_run()` — Background coroutine that iterates through steps sequentially. For each step: marks as running, simulates latency (300–1500ms via `asyncio.sleep`), generates mock tool payloads/responses, records tokens (100–900 random), updates the run store in-place so SSE clients see progress. On completion, marks run as "completed" with final_result summary.
+  - `GET /{use_case_id}/runs` — Lists runs for a specific use case.
+  - `GET /{use_case_id}/runs/{run_id}` — Gets single run detail.
+  - `GET /{use_case_id}/runs/{run_id}/events` — SSE streaming (same implementation as uc_runs router).
+
+- `src/app/services/api.ts` — Added `UseCaseRunStepResponse` interface (step_index, skill_id, skill_name, model, tools, instructions, status, latency_ms, tokens, result_summary, tool_request_payload, tool_response, llm_output, started_at, completed_at). Added `UseCaseRunResponse` interface (run_id, tenant_id, use_case_id, use_case_name, status, steps, total_latency_ms, total_tokens, final_result, timestamps). Replaced old `RunUseCaseResponse` with comment. Updated `runUseCase()` return type to `UseCaseRunResponse`. Added 5 new API functions: `getUseCaseRuns()`, `getUseCaseRun()`, `getAllUCRuns()`, `getUCRun()`, `connectUCRunEvents()` (EventSource-based SSE client that dispatches `onStepCompleted` and `onRunCompleted` callbacks).
+
+- `src/app/pages/AgentConsolePage.tsx` — Complete rewrite from mock chat interface to Figma two-panel layout:
+  - **Left panel**: Tenant selector (from `useTenants()`), run mode toggle (Use Case / Ask Agent), use case dropdown (populated from `getUseCases()`), prompt textarea, Run/Ask button. Below: Recent Runs list using `RunCard` components (from `getAllUCRuns()`, limited to 5).
+  - **Right panel**: Execution Trace timeline using `TraceStep` components. Populated in real-time via `connectUCRunEvents()` SSE — each step appears as it completes. Shows running indicator during execution, success banner on completion, empty state with Play icon when idle.
+  - Run flow: click "Run Use Case" → calls `runUseCase()` → subscribes to SSE → trace steps appear one by one → run completes → recent runs refresh.
+
+- `src/app/pages/RunDetailPage.tsx` — Complete rewrite from mock 5-step view to Figma design with live API:
+  - Fetches run via `getUCRun(currentTenantId, id)` on mount.
+  - **Header**: Run ID (monospace) + StatusBadge, use case name.
+  - **4 metadata cards**: Tenant, Started, Completed, Use Case.
+  - **3/4 execution timeline**: Uses `TraceStep` components for each step.
+  - **1/4 run summary sidebar** (sticky): Total Steps, Total Latency, Total Tokens, Final Result.
+  - Loading spinner and not-found state handled.
+
+- `src/app/pages/RunsPage.tsx` — Complete rewrite from complex split-pane WebSocket/feedback UI to Figma filterable table:
+  - Fetches runs via `getAllUCRuns(currentTenantId)`.
+  - **Search input**: Filters by run ID, use case name, tenant ID.
+  - **Date filter dropdown**: All time, Today, Yesterday, Last 7 days.
+  - **Status filter pills**: All, Completed (green), Running (blue), Failed (red) — each with count badge.
+  - **Table**: Run ID, Use Case, Status (StatusBadge), Steps count, Duration, Started. Clickable rows navigate to `/runs/{run_id}`.
+  - Empty state with contextual message.
+  - Results count indicator.
+
+- `src/app/pages/ObservabilityPage.tsx` — Complete rewrite from summary/trends dashboard to Figma trace explorer:
+  - Fetches runs + use cases + skills in parallel via `Promise.all()`.
+  - Flattens all run steps into a `TraceEntry[]` array for the table.
+  - **4-column filter bar**: Use Case, Skill, Status, Date Range — dynamically populated from API data.
+  - **Trace table**: Step number, Run ID (blue monospace link), Skill, Tool (code badge), Latency, Tokens, Status (StatusBadge). Clickable rows.
+  - **Detail drawer** (fixed right, 600px): Backdrop overlay + slide-in panel. Shows Overview (tenant, use case, skill, model, timestamp), Metrics (latency + tokens cards), Skill Instructions, Tool Request Payload (JSON), Tool Response (JSON), LLM Output (blue background).
+  - Loading state, empty states for no data and no filter matches.
+
+**Files NOT modified:**
+- `src/app/routes.tsx` — No route changes. `/runs`, `/runs/:id`, `/console`, `/observability` already exist.
+- `src/app/components/Layout.tsx`, `src/app/App.tsx` — Unchanged.
+- `src/app/pages/TenantsPage.tsx`, `src/app/pages/CreateTenantPage.tsx` — Unchanged.
+- `src/app/pages/IntegrationsPage.tsx`, `src/app/pages/IntegrationConfigPage.tsx` — Sprint #021 wiring preserved.
+- `src/app/pages/SkillsPage.tsx`, `src/app/pages/SkillEditorPage.tsx` — Sprint #022 wiring preserved.
+- `src/app/pages/UseCasesPage.tsx`, `src/app/pages/UseCaseBuilderPage.tsx` — Sprint #023 wiring preserved (UseCaseBuilderPage's Run button now creates real runs via upgraded endpoint).
+- `src/app/pages/SettingsPage.tsx`, `src/app/pages/WorkerServiceNowPage.tsx` — Unchanged.
+- `backend/routers/admin.py`, `backend/routers/runs.py` — Existing orchestrator-based run system preserved intact.
+
+**Key architecture decisions:**
+
+- **Separate run system** — `UseCaseRun` / `UseCaseRunStore` is distinct from the existing `AgentRun` / `RunStore`. The existing system handles orchestrator-based runs from the UI/ServiceNow with WebSocket streaming, dual-answer mode, feedback, and writeback. The new system handles use-case-based execution with step-level granularity and SSE streaming. Both coexist — the existing `/api/runs` endpoints are untouched.
+
+- **SSE over WebSocket** — The new execution system uses Server-Sent Events instead of WebSocket. SSE is simpler (HTTP-based, auto-reconnect, no bidirectional needed) and sufficient for the unidirectional event stream. The existing WebSocket system in `runs.py` is preserved for backward compatibility.
+
+- **Background execution via asyncio.create_task** — The run endpoint launches execution as a fire-and-forget async task. The task updates the run store in-place, so SSE clients can poll for changes. No pub/sub needed — the SSE generator polls the store every 300ms.
+
+- **Simulated execution** — Steps simulate real processing with random latency (300–1500ms) and token counts (100–900). Tool payloads and responses are generated mocks. This provides a realistic demo experience while the actual LLM/tool integration is built in future sprints.
+
+- **Flat trace entries for observability** — The ObservabilityPage flattens all run steps into a single table, enabling cross-run analysis. Each step is independently filterable by use case, skill, status, and date range. The detail drawer provides deep inspection of individual steps.
+
+- **Reusable components** — StatusBadge, TraceStep, RunCard, ToolInvocation, and TimelineConnector are shared across all 4 pages, ensuring consistent visual language.
+
+**Current route map (updated):**
+```
+/console                 → AgentConsolePage (live API, SSE streaming)
+/runs                    → RunsPage (live API, filterable table)
+/runs/:id                → RunDetailPage (live API, trace timeline + summary)
+/observability           → ObservabilityPage (live API, trace explorer + drawer)
+```
+
+**Current backend endpoint map (new/changed):**
+```
+POST   /api/admin/{tenant_id}/use-cases/{id}/run        → Creates real run + background execution
+GET    /api/admin/{tenant_id}/use-cases/{id}/runs        → List runs for use case
+GET    /api/admin/{tenant_id}/use-cases/{id}/runs/{rid}  → Get single run
+GET    /api/admin/{tenant_id}/use-cases/{id}/runs/{rid}/events → SSE stream
+GET    /api/admin/{tenant_id}/uc-runs                    → List all runs for tenant
+GET    /api/admin/{tenant_id}/uc-runs/{rid}              → Get single run
+GET    /api/admin/{tenant_id}/uc-runs/{rid}/events       → SSE stream
+```
+
+**What GPT should know for next steps:**
+- The full pipeline now works end-to-end: create tenant → configure integrations → define skills → build use case → run from Agent Console → watch execution in real-time → browse in Runs table → analyze in Observability trace explorer.
+- Execution is simulated — each step sleeps for 300–1500ms and generates mock payloads. Real LLM/tool integration is the next major backend task.
+- The existing orchestrator-based run system (`/api/runs`, WebSocket, dual-answer, feedback, writeback) is fully preserved and operational alongside the new use-case execution system.
+- All 4 Figma-designed pages are implemented with exact styling from the designs, wired to live API.
+- `npx tsc --noEmit` passes clean. Backend boots with 72 routes.
+
+*Next change will be #025.*
+
+---
+
+## #025 — 2026-03-04 — Real Tool Execution + Agent UI + Demo Bootstrap
+
+**What happened:**
+Two feature sets delivered: (1) Sprint #025 replaced simulated execution with real tool invocation for ServiceNow and Google Drive, added run cancellation, and upgraded frontend trace components. (2) Agent UI integration added a standalone chat-based agent page at `/agentui` with a backend `/ask` endpoint and automatic demo data seeding on startup.
+
+**Files created:**
+
+- `backend/services/tool_executor.py` — Central dispatch function `execute_tool(tenant_id, tool_id, input_payload, app)`. Maps 7 tool IDs to handler functions across ServiceNow and Google Drive integrations. Returns `{"status": "not_implemented"}` for unregistered tools.
+
+- `backend/services/servicenow_tools.py` — 4 ServiceNow tool handlers: `search_incidents` (queries `/api/now/table/incident`), `get_incident_details` (gets single incident by sys_id), `search_kb` (queries `/api/now/table/kb_knowledge`), `add_work_note` (PATCH work_notes). All load credentials from `snow_config_store` and make real HTTP calls via `httpx.AsyncClient`.
+
+- `backend/services/google_drive_tools.py` — 3 Google Drive tool handlers: `search_documents`, `read_file`, `create_file`. Use existing `GoogleDriveProvider` and load config from `drive_config_store`.
+
+- `backend/routers/agent.py` — New router at `/api/admin/{tenant_id}/agent` with `POST /ask` endpoint. Accepts `{prompt}`, loads active use cases, scores each against prompt via `_score_use_case()` (keyword overlap against name, description, triggers), executes matched use case's skill tools via `execute_tool()`, returns `{reasoning, use_case, skills, tools, result}`. Score threshold of 5% — below returns "No matching workflow found".
+
+- `backend/bootstrap/__init__.py` — Empty package init.
+
+- `backend/bootstrap/demo_setup.py` — `seed_demo_data(app)` auto-seeds on startup if "acme" tenant doesn't exist. Creates: ACME Corp tenant (active), ServiceNow integration (dev221705.service-now.com, admin/1Surfer1!), 4 skills (Incident Lookup, Knowledge Base Search, Documentation Search, Diagnosis Summary), 1 active use case (Email Incident Diagnosis with email-related triggers).
+
+- `src/app/components/agentui/` — 13 Figma component files for the Agent UI:
+  - `TopBar.tsx` — Agent header with name, tenant, status indicator (lucide icons)
+  - `ChatMessage.tsx` — User/agent chat bubbles
+  - `InputPanel.tsx` — Textarea with glow effect, Shift+Enter for newline, character counter, action buttons
+  - `ExecutionPanel.tsx` — Right-side execution trace with step cards, status colors, confidence bar
+  - `AgentReasoning.tsx` — Reasoning step list with status indicators
+  - `SelectedUseCase.tsx` — Use case card with confidence badge
+  - `SkillExecutionTimeline.tsx` — Skill execution timeline with duration badges
+  - `ToolsUsed.tsx` — Tool call list with target system, response time, status codes
+  - `AIRecommendation.tsx` — Resolution display with confidence and suggested actions
+  - `AgentActions.tsx` — Action buttons (approve, escalate, create ticket, share)
+  - `AgentResponseCard.tsx` — Structured agent response card
+  - `MobileAgentView.tsx` — Mobile-optimized tabbed layout
+  - `MobileApp.tsx` — Mobile wrapper with hardcoded demo data
+
+- `src/app/pages/AgentUIPage.tsx` — Standalone dark-theme page with two-column layout. Left: chat conversation with user messages + AIRecommendation responses + loading indicator. Right: execution trace panel with reasoning steps, selected use case, skills executed, tools & APIs, execution time footer. Calls `askAgent()` API function. Mobile-responsive with MobileApp fallback at <768px.
+
+- `src/app/components/CancelRunButton.tsx` — Red cancel button with XCircle icon for use case runs.
+
+- `src/app/components/ToolCallItem.tsx` — Expandable tool call with request/response JSON display, uses StatusBadge.
+
+- `src/app/components/TraceStepToolSection.tsx` — Container rendering list of ToolCallItems.
+
+**Files modified:**
+
+- `backend/models.py` — Added `ToolCallRecord` model (name, status, latency_ms, request, response). Added `tool_calls: list[ToolCallRecord]` to `UseCaseRunStep`. Added `"cancelled"` to `UseCaseRun.status` literal.
+
+- `backend/routers/use_cases.py` — Replaced simulated execution with real tool invocation. `_execute_run()` now calls `execute_tool()` for each tool, builds `ToolCallRecord` list, checks for cancellation between steps.
+
+- `backend/routers/uc_runs.py` — Added `POST /{run_id}/cancel` endpoint (sets status="cancelled"). SSE generator emits `run.cancelled` event.
+
+- `backend/routers/__init__.py` — Added `agent_router` to imports and `__all__`.
+
+- `backend/main.py` — Added `lifespan` context manager calling `seed_demo_data()` on startup. Added `agent_router` import and `app.include_router(agent_router)`. Backend now boots with 74 routes.
+
+- `src/app/routes.tsx` — Added `AgentUIPage` import and `/agentui` route (outside Layout, no sidebar entry).
+
+- `src/app/services/api.ts` — Added `AgentAskResponse` interface and `askAgent()` function. Added `ToolCallRecordResponse` interface. Added `tool_calls` to `UseCaseRunStepResponse`. Added `'cancelled'` to `UseCaseRunResponse.status`. Added `onRunCancelled` callback to `connectUCRunEvents()`. Added `cancelUCRun()` function.
+
+- `src/app/components/StatusBadge.tsx` — Added "cancelled" status type with orange variant.
+
+- `src/app/components/TraceStep.tsx` — Added `toolCalls` prop and `TraceStepToolSection` rendering.
+
+- `src/app/pages/AgentConsolePage.tsx` — Added CancelRunButton, cancel handler, toolCalls mapping on TraceStep, cancelled/failed indicators.
+
+- `src/app/pages/RunDetailPage.tsx` — Added CancelRunButton in header, cancel handler, toolCalls mapping on TraceStep.
+
+- `src/app/pages/RunsPage.tsx` — Updated StatusBadge usage.
+
+**Key architecture decisions:**
+
+- **Real tool execution** — `execute_tool()` dispatches to integration-specific handlers that make real HTTP calls. Each tool call is individually timed and recorded as a `ToolCallRecord`. Non-implemented tools return a status marker rather than failing.
+
+- **Cooperative cancellation** — Execution loop checks `run.status` from the store before each step. Cancel endpoint sets status to "cancelled", and the next iteration exits. SSE emits `run.cancelled` for frontend cleanup.
+
+- **Agent UI isolation** — All Figma Agent UI components under `src/app/components/agentui/` to avoid name conflicts with existing components. Route at `/agentui` is outside Layout wrapper.
+
+- **Demo bootstrap via lifespan** — `seed_demo_data()` runs in FastAPI's `lifespan` context manager. Only seeds if "acme" tenant doesn't exist, making it idempotent across restarts.
+
+- **Keyword scoring** — `_score_use_case()` computes token overlap between prompt and use case name/description/triggers. Simple but effective for demo; threshold at 5% prevents false matches.
+
+**Current backend endpoint map (new):**
+```
+POST   /api/admin/{tenant_id}/agent/ask                  → Agent prompt → use case match → tool execution → result
+POST   /api/admin/{tenant_id}/uc-runs/{rid}/cancel       → Cancel a running use case execution
+```
+
+**Current route map (new):**
+```
+/agentui                 → AgentUIPage (standalone, no sidebar)
+```
+
+**Verification:**
+- `npx tsc --noEmit` passes clean.
+- Backend boots with 74 routes.
+- Demo data auto-seeds on startup.
+
+*Next change will be #026.*

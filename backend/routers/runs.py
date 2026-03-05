@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, WebSocket, WebSocketDisconnect
 
-from models import AgentEvent, AgentRun, CreateFeedbackRequest, CreateRunRequest, FeedbackEvent, MetricsEvent, ServiceNowRunRequest, WorkObject, WritebackApproveRequest
+from models import AgentEvent, AgentRun, CreateFeedbackRequest, CreateRunRequest, FeedbackEvent, MetricsEvent, SaveToDriveRequest, SelectAnswerRequest, ServiceNowRunRequest, WorkObject, WritebackApproveRequest
 from services.google_drive import GoogleDriveProvider
 from services.orchestrator import run_orchestrator
 from services.servicenow import ServiceNowError, ServiceNowProvider, format_work_notes
@@ -88,6 +88,8 @@ async def create_run(
         snow_config_store=request.app.state.snow_config_store,
         snow_provider=_snow,
         metrics_event_store=request.app.state.metrics_event_store,
+        llm_config_store=request.app.state.llm_config_store,
+        llm_assignment_store=request.app.state.llm_assignment_store,
     )
 
     return {"run_id": run_id}
@@ -153,6 +155,8 @@ async def create_run_from_servicenow(
         snow_config_store=request.app.state.snow_config_store,
         snow_provider=_snow,
         metrics_event_store=request.app.state.metrics_event_store,
+        llm_config_store=request.app.state.llm_config_store,
+        llm_assignment_store=request.app.state.llm_assignment_store,
     )
 
     return {"run_id": run_id}
@@ -220,6 +224,8 @@ async def create_run_from_servicenow_preview(
         snow_provider=_snow,
         metrics_event_store=request.app.state.metrics_event_store,
         allow_writeback=False,
+        llm_config_store=request.app.state.llm_config_store,
+        llm_assignment_store=request.app.state.llm_assignment_store,
     )
 
     return {"run_id": run_id}
@@ -437,6 +443,117 @@ async def run_events_ws(websocket: WebSocket, run_id: str, tenant_id: str = ""):
         pass
     finally:
         _unsubscribe(run_id, queue)
+
+
+# --- Answer selection & save-to-drive ---
+
+
+@router.put("/{run_id}/select-answer")
+async def select_answer(
+    run_id: str,
+    body: SelectAnswerRequest,
+    request: Request,
+):
+    """Select KB or LLM answer for a dual-mode run."""
+    run = await request.app.state.run_store.get_run(run_id)
+    if run is None or run.tenant_id != body.tenant_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if run.result is None:
+        raise HTTPException(status_code=409, detail="Run has no result")
+
+    if run.result.get("mode") != "dual":
+        raise HTTPException(status_code=400, detail="Run is not in dual mode")
+
+    answer_key = f"{body.selected}_answer"
+    if answer_key not in run.result:
+        raise HTTPException(status_code=400, detail=f"No {body.selected} answer available")
+
+    # Update the selected field and top-level fields for backward compat
+    selected_answer = run.result[answer_key]
+    updated_result = {
+        **run.result,
+        "selected": body.selected,
+        "summary": selected_answer["summary"],
+        "steps": selected_answer["steps"],
+        "sources": selected_answer["sources"],
+        "confidence": selected_answer["confidence"],
+    }
+
+    await request.app.state.run_store.update_run(run_id, result=updated_result)
+
+    # Return the updated run
+    updated_run = await request.app.state.run_store.get_run(run_id)
+    return updated_run.model_dump(mode="json")
+
+
+@router.post("/{run_id}/save-to-drive")
+async def save_to_drive(
+    run_id: str,
+    body: SaveToDriveRequest,
+    request: Request,
+):
+    """Save the selected LLM answer to the classification folder in Google Drive."""
+    run = await request.app.state.run_store.get_run(run_id)
+    if run is None or run.tenant_id != body.tenant_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if run.result is None:
+        raise HTTPException(status_code=409, detail="Run has no result")
+
+    if run.result.get("selected") != "llm":
+        raise HTTPException(status_code=400, detail="Only LLM answers can be saved to Drive")
+
+    folder_id = run.result.get("classification_folder_id")
+    if not folder_id:
+        raise HTTPException(status_code=400, detail="No classification folder ID available")
+
+    llm_answer = run.result.get("llm_answer")
+    if not llm_answer:
+        raise HTTPException(status_code=400, detail="No LLM answer available")
+
+    # Format as markdown
+    title = run.work_object.title
+    summary = llm_answer.get("summary", "")
+    steps = llm_answer.get("steps", [])
+    sources = llm_answer.get("sources", [])
+
+    lines = [f"# {title}", "", summary, ""]
+    if steps:
+        lines.append("## Resolution Steps")
+        for i, step in enumerate(steps, 1):
+            lines.append(f"{i}. {step}")
+        lines.append("")
+    if sources:
+        lines.append("## Sources")
+        for src in sources:
+            src_title = src.get("title", "Untitled")
+            src_url = src.get("url", "")
+            if src_url:
+                lines.append(f"- [{src_title}]({src_url})")
+            else:
+                lines.append(f"- {src_title}")
+        lines.append("")
+
+    content = "\n".join(lines)
+    work_id = run.work_object.work_id.replace("/", "_").replace(" ", "_")
+    filename = f"resolution_{work_id}.md"
+
+    try:
+        file_info = await _drive.upload_document(
+            access_token=body.access_token,
+            folder_id=folder_id,
+            filename=filename,
+            content=content,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Drive upload failed: {exc}")
+
+    return {
+        "ok": True,
+        "file_id": file_info.get("id", ""),
+        "web_link": file_info.get("webViewLink", ""),
+    }
 
 
 # --- Feedback endpoints ---
