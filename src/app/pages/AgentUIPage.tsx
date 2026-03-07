@@ -12,7 +12,7 @@ import { streamAgent } from "../services/agentStream";
 
 interface Message {
   id: string;
-  type: "user" | "agent-structured" | "agent-draft" | "agent-question";
+  type: "user" | "agent-structured" | "agent-draft" | "agent-question" | "agent-result";
   content: string;
   timestamp: string;
   result?: string;
@@ -342,7 +342,7 @@ export default function AgentUIPage() {
       }
       const successMsg: Message = {
         id: Date.now().toString(),
-        type: "agent-structured",
+        type: "agent-result",
         content: "",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         result: data.message || "Repl created successfully!",
@@ -352,7 +352,7 @@ export default function AgentUIPage() {
       const errText = err instanceof Error ? err.message : "Network error";
       const errMsg: Message = {
         id: Date.now().toString(),
-        type: "agent-structured",
+        type: "agent-result",
         content: "",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         result: `Failed to create repl: ${errText}`,
@@ -459,6 +459,18 @@ export default function AgentUIPage() {
                         <span className="text-xs text-[#8FA7B5] ml-auto">{message.timestamp}</span>
                       </div>
                       <p className="text-sm text-[#F1F5F9]">{message.content}</p>
+                    </div>
+                  );
+                }
+                if (message.type === "agent-result" && message.result) {
+                  return (
+                    <div key={message.id}>
+                      <AIRecommendation
+                        resolution={message.result}
+                        confidence={94}
+                        suggestedActions={[]}
+                        additionalContext=""
+                      />
                     </div>
                   );
                 }
