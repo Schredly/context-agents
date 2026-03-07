@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from models import TOOL_CATALOG_BY_ID
-from services import servicenow_tools, google_drive_tools
+from services import servicenow_tools, google_drive_tools, replit_tools
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ _HANDLERS: dict[str, callable] = {
     "google-drive.search_documents": google_drive_tools.search_documents,
     "google-drive.read_file": google_drive_tools.read_file,
     "google-drive.create_file": google_drive_tools.create_file,
+    "replit.build_application": replit_tools.build_application,
 }
 
 

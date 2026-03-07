@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from models import Action, AgentUIRun
-from services import servicenow_tools
+from services import servicenow_tools, google_drive_tools, jira_tools, slack_tools, pdf_tools, replit_tools, snow_to_replit
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 # Each handler takes (tenant_id, resolved_params, app) -> dict
 _OPERATION_HANDLERS: dict[str, callable] = {
     "servicenow:incident.create": servicenow_tools.create_incident,
+    "servicenow:kb_knowledge.create": servicenow_tools.create_knowledge_article,
+    "google-drive:knowledge_doc.create": google_drive_tools.create_knowledge_doc,
+    "jira:issue.create": jira_tools.create_issue,
+    "slack:message.post": slack_tools.post_message,
+    "internal:pdf.generate": pdf_tools.generate_pdf,
+    "replit:application.build": replit_tools.build_application_action,
+    "servicenow:catalog_to_replit": snow_to_replit.convert_catalog_to_replit,
+    "servicenow:catalog_by_title_to_replit": snow_to_replit.convert_catalog_by_title_to_replit,
 }
 
 
@@ -29,9 +37,9 @@ def _resolve_parameters(
         if source == "static":
             resolved[param.name] = param.value or ""
         elif source == "user_prompt":
-            resolved[param.name] = run.prompt if run else ""
+            resolved[param.name] = (run.prompt if run else "") or user_input.get(param.name, "")
         elif source == "agent_result":
-            resolved[param.name] = run.result if run else ""
+            resolved[param.name] = (run.result if run else "") or user_input.get(param.name, "")
         elif source == "user_input":
             resolved[param.name] = user_input.get(param.name, param.value or "")
         elif source == "agent_metadata":

@@ -16,8 +16,10 @@ from models import (
     GoogleDriveConfig,
     Integration,
     LLMConfig,
+    LLMUsageEvent,
     MetricsEvent,
     RunTelemetry,
+    ReplitConfig,
     ServiceNowConfig,
     Skill,
     Tenant,
@@ -35,7 +37,9 @@ from store.interface import (
     GoogleDriveConfigStore,
     IntegrationStore,
     LLMConfigStore,
+    LLMUsageStore,
     MetricsEventStore,
+    ReplitConfigStore,
     RunStore,
     ServiceNowConfigStore,
     SkillStore,
@@ -139,6 +143,26 @@ class InMemoryServiceNowConfigStore(ServiceNowConfigStore):
             config = ServiceNowConfig(**data)
         else:
             config = ServiceNowConfig(tenant_id=tenant_id, **kwargs)
+        self._configs[tenant_id] = config
+        return config
+
+
+class InMemoryReplitConfigStore(ReplitConfigStore):
+    def __init__(self) -> None:
+        self._configs: dict[str, ReplitConfig] = {}
+
+    async def get_by_tenant(self, tenant_id: str) -> Optional[ReplitConfig]:
+        return self._configs.get(tenant_id)
+
+    async def upsert(self, tenant_id: str, **kwargs: Any) -> ReplitConfig:
+        existing = self._configs.get(tenant_id)
+        if existing is not None:
+            data = existing.model_dump()
+            data.update({k: v for k, v in kwargs.items() if v is not None})
+            data["updated_at"] = datetime.now(timezone.utc)
+            config = ReplitConfig(**data)
+        else:
+            config = ReplitConfig(tenant_id=tenant_id, **kwargs)
         self._configs[tenant_id] = config
         return config
 
@@ -453,6 +477,35 @@ class InMemoryAgentUIRunEventStore(AgentUIRunEventStore):
         return sorted(
             [e for e in self._events.values() if e.run_id == run_id],
             key=lambda e: e.timestamp,
+        )
+
+
+class InMemoryLLMUsageStore(LLMUsageStore):
+    def __init__(self) -> None:
+        self._events: dict[str, LLMUsageEvent] = {}
+
+    async def create(self, event: LLMUsageEvent) -> LLMUsageEvent:
+        self._events[event.id] = event
+        return event
+
+    async def list_for_tenant(self, tenant_id: str) -> list[LLMUsageEvent]:
+        return sorted(
+            [e for e in self._events.values() if e.tenant_id == tenant_id],
+            key=lambda e: e.timestamp,
+            reverse=True,
+        )
+
+    async def list_for_run(self, run_id: str) -> list[LLMUsageEvent]:
+        return sorted(
+            [e for e in self._events.values() if e.run_id == run_id],
+            key=lambda e: e.timestamp,
+        )
+
+    async def list_all(self) -> list[LLMUsageEvent]:
+        return sorted(
+            self._events.values(),
+            key=lambda e: e.timestamp,
+            reverse=True,
         )
 
 

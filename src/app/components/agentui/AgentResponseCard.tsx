@@ -48,24 +48,24 @@ export function AgentResponseCard({ sections, timestamp }: AgentResponseCardProp
   const getColor = (type: string) => {
     switch (type) {
       case "reasoning":
-        return "text-purple-400 border-purple-500/30 bg-purple-500/10";
+        return "text-[#2E86AB] border-[#2E86AB]/30 bg-[#2E86AB]/10";
       case "usecase":
-        return "text-blue-400 border-blue-500/30 bg-blue-500/10";
+        return "text-[#2E86AB] border-[#2E86AB]/30 bg-[#2E86AB]/10";
       case "skills":
-        return "text-cyan-400 border-cyan-500/30 bg-cyan-500/10";
+        return "text-[#59C3C3] border-[#59C3C3]/30 bg-[#59C3C3]/10";
       case "tools":
-        return "text-indigo-400 border-indigo-500/30 bg-indigo-500/10";
+        return "text-[#2E86AB] border-[#2E86AB]/30 bg-[#2E86AB]/10";
       case "answer":
-        return "text-green-400 border-green-500/30 bg-green-500/10";
+        return "text-[#59C3C3] border-[#59C3C3]/30 bg-[#59C3C3]/10";
       default:
-        return "text-gray-400 border-gray-500/30 bg-gray-500/10";
+        return "text-[#C7D2DA] border-[#8FA7B5]/30 bg-[#8FA7B5]/10";
     }
   };
 
   return (
     <div className="mb-4">
       {timestamp && (
-        <div className="text-xs text-gray-500 mb-2 ml-11">{timestamp}</div>
+        <div className="text-xs text-[#8FA7B5] mb-2 ml-11">{timestamp}</div>
       )}
       <div className="ml-11 space-y-2">
         {sections.map((section, index) => {
@@ -97,14 +97,14 @@ export function AgentResponseCard({ sections, timestamp }: AgentResponseCardProp
                   {Array.isArray(section.content) ? (
                     <ul className="space-y-1">
                       {section.content.map((item, i) => (
-                        <li key={i} className="text-sm text-gray-300 flex items-start gap-2">
-                          <span className="text-gray-500 mt-1">•</span>
+                        <li key={i} className="text-sm text-[#C7D2DA] flex items-start gap-2">
+                          <span className="text-[#8FA7B5] mt-1">•</span>
                           <span>{item}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-gray-300">{section.content}</p>
+                    <p className="text-sm text-[#C7D2DA]">{section.content}</p>
                   )}
                 </div>
               )}

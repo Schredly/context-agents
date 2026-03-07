@@ -97,7 +97,7 @@ export function TenantsPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => navigate(`/tenants/create`)}
+                          onClick={() => navigate(`/tenants/${tenant.id}`)}
                           className="p-2 hover:bg-gray-100 rounded transition-colors"
                           title="Open Setup"
                         >

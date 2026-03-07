@@ -9,7 +9,7 @@ import httpx
 
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
-CLAUDE_TIMEOUT = 30
+CLAUDE_TIMEOUT = 120
 
 logger = logging.getLogger(__name__)
 
@@ -115,9 +115,21 @@ OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
 
 def _clean_key(key: str) -> str:
-    """Strip whitespace and invisible Unicode characters from API keys."""
+    """Strip whitespace, invisible Unicode characters, and extract the actual API key
+    if the user pasted surrounding text (e.g. 'OpenAI API Key: sk-proj-abc123')."""
+    import re
     import unicodedata
-    return "".join(ch for ch in key.strip() if unicodedata.category(ch)[0] != "C")
+    # Remove invisible / control characters
+    cleaned = "".join(ch for ch in key.strip() if unicodedata.category(ch)[0] != "C")
+    # Try to extract an OpenAI key (sk-... pattern, at least 20 chars of alphanumeric/dash/underscore)
+    m = re.search(r"(sk-[A-Za-z0-9_-]{20,})", cleaned)
+    if m:
+        return m.group(1)
+    # Try to extract an Anthropic key (sk-ant-... pattern)
+    m = re.search(r"(sk-ant-[A-Za-z0-9_-]{20,})", cleaned)
+    if m:
+        return m.group(1)
+    return cleaned
 
 
 async def test_api_key(provider: str, api_key: str, model: str) -> None:
@@ -149,14 +161,14 @@ async def test_api_key(provider: str, api_key: str, model: str) -> None:
                 f"Anthropic API returned {res.status_code}: {detail or res.text[:200]}"
             )
     elif provider == "openai":
-        payload = {
+        payload: dict = {
             "model": model,
-            "max_tokens": 1,
+            "max_completion_tokens": 128,
             "messages": [
                 {"role": "user", "content": "Hi"},
             ],
         }
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             res = await client.post(
                 OPENAI_API_URL,
                 headers={
@@ -229,13 +241,29 @@ async def _call_anthropic(api_key: str, model: str, user_message: str, *, system
     return text, meta
 
 
+_OPENAI_REASONING_MODELS = {"o3", "o3-mini", "o3-pro", "o4-mini"}
+
+
+def _is_reasoning_model(model: str) -> bool:
+    """Check if a model is an OpenAI reasoning model (o-series)."""
+    base = model.split("-")[0]
+    # Match "o3", "o4" etc. Also check the full model with date stripped
+    if base in ("o1", "o3", "o4"):
+        return True
+    return model in _OPENAI_REASONING_MODELS
+
+
 async def _call_openai(api_key: str, model: str, user_message: str, *, system_prompt: str = SYSTEM_PROMPT) -> tuple[str, dict]:
     """Call the OpenAI Chat Completions API. Returns (response_text, raw_meta)."""
-    payload = {
+    # Reasoning models (o-series) use "developer" role instead of "system"
+    # and need higher token limits for chain-of-thought overhead
+    sys_role = "developer" if _is_reasoning_model(model) else "system"
+    token_limit = 16384 if _is_reasoning_model(model) else 4096
+    payload: dict = {
         "model": model,
-        "max_tokens": 1024,
+        "max_completion_tokens": token_limit,
         "messages": [
-            {"role": "system", "content": system_prompt},
+            {"role": sys_role, "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
     }
@@ -280,6 +308,15 @@ async def _call_openai(api_key: str, model: str, user_message: str, *, system_pr
         "output_tokens": usage.get("completion_tokens"),
     }
     return text, meta
+
+
+async def call_llm(provider: str, api_key: str, model: str,
+                   user_message: str, system_prompt: str) -> tuple[str, dict]:
+    """Generic LLM call — dispatches to the right provider."""
+    api_key = _clean_key(api_key)
+    if provider == "openai":
+        return await _call_openai(api_key, model, user_message, system_prompt=system_prompt)
+    return await _call_anthropic(api_key, model, user_message, system_prompt=system_prompt)
 
 
 async def synthesize_resolution(

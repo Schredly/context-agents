@@ -13,16 +13,16 @@ export function ChatMessage({ type, content, timestamp }: ChatMessageProps) {
         <div className="flex items-start gap-3 max-w-2xl">
           <div className="flex-1">
             {timestamp && (
-              <div className="text-xs text-[#71717a] mb-1 text-right">
+              <div className="text-xs text-[#8FA7B5] mb-1 text-right">
                 {timestamp}
               </div>
             )}
-            <div className="bg-[#fafafa] text-[#0a0a0a] px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm">
+            <div className="bg-[#2E86AB] text-[#F1F5F9] px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm">
               {content}
             </div>
           </div>
-          <div className="w-8 h-8 rounded-full bg-[#161616] border border-[#262626] flex items-center justify-center flex-shrink-0">
-            <User className="w-4 h-4 text-[#a1a1aa]" />
+          <div className="w-8 h-8 rounded-full bg-[#102A43] border border-[#2F5F7A] flex items-center justify-center flex-shrink-0">
+            <User className="w-4 h-4 text-[#C7D2DA]" />
           </div>
         </div>
       </div>
@@ -32,14 +32,14 @@ export function ChatMessage({ type, content, timestamp }: ChatMessageProps) {
   return (
     <div className="flex justify-start mb-4">
       <div className="flex items-start gap-3 max-w-2xl">
-        <div className="w-8 h-8 rounded-full bg-[#161616] border border-[#262626] flex items-center justify-center flex-shrink-0">
-          <Bot className="w-4 h-4 text-[#a1a1aa]" />
+        <div className="w-8 h-8 rounded-full bg-[#102A43] border border-[#2F5F7A] flex items-center justify-center flex-shrink-0">
+          <Bot className="w-4 h-4 text-[#C7D2DA]" />
         </div>
         <div className="flex-1">
           {timestamp && (
-            <div className="text-xs text-[#71717a] mb-1">{timestamp}</div>
+            <div className="text-xs text-[#8FA7B5] mb-1">{timestamp}</div>
           )}
-          <div className="bg-[#161616] text-[#fafafa] px-4 py-2.5 rounded-2xl rounded-tl-sm border border-[#262626] text-sm">
+          <div className="bg-[#102A43] text-[#F1F5F9] px-4 py-2.5 rounded-2xl rounded-tl-sm border border-[#2F5F7A] text-sm">
             {content}
           </div>
         </div>

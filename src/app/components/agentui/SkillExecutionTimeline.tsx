@@ -37,23 +37,23 @@ export function SkillExecutionTimeline({
     switch (status) {
       case "completed":
         return {
-          border: "border-[#262626]",
+          border: "border-[#2F5F7A]",
           bg: "",
-          text: "text-emerald-400",
-          iconBg: "bg-emerald-500/10",
-          dot: "bg-emerald-500",
+          text: "text-[#59C3C3]",
+          iconBg: "bg-[#59C3C3]/10",
+          dot: "bg-[#59C3C3]",
         };
       case "running":
         return {
-          border: "border-[#333]",
-          bg: "bg-[#161616]",
-          text: "text-indigo-400",
-          iconBg: "bg-indigo-500/10",
-          dot: "bg-indigo-500",
+          border: "border-[#2F5F7A]",
+          bg: "bg-[#102A43]",
+          text: "text-[#2E86AB]",
+          iconBg: "bg-[#2E86AB]/10",
+          dot: "bg-[#2E86AB]",
         };
       case "failed":
         return {
-          border: "border-[#262626]",
+          border: "border-[#2F5F7A]",
           bg: "",
           text: "text-red-400",
           iconBg: "bg-red-500/10",
@@ -78,22 +78,22 @@ export function SkillExecutionTimeline({
     }, 0);
 
   return (
-    <div className="bg-[#0a0a0a] border border-[#262626] rounded-[10px] overflow-hidden">
+    <div className="bg-[#0B1E2D] border border-[#2F5F7A] rounded-[10px] overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-[#262626]">
+      <div className="px-4 py-3 border-b border-[#2F5F7A]">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-[#fafafa] text-sm font-medium flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+            <h3 className="text-[#F1F5F9] text-sm font-medium flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#2E86AB]" />
               {title}
             </h3>
-            <p className="text-xs text-[#71717a] mt-0.5">
+            <p className="text-xs text-[#8FA7B5] mt-0.5">
               {skills.filter((s) => s.status === "completed").length} of {skills.length} skills executed
             </p>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#262626]">
-            <Clock className="w-3 h-3 text-[#71717a]" />
-            <span className="text-xs text-[#71717a]">{totalDuration.toFixed(2)}s total</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#2F5F7A]">
+            <Clock className="w-3 h-3 text-[#8FA7B5]" />
+            <span className="text-xs text-[#8FA7B5]">{totalDuration.toFixed(2)}s total</span>
           </div>
         </div>
       </div>
@@ -109,7 +109,7 @@ export function SkillExecutionTimeline({
             return (
               <div key={skill.id} className="relative">
                 {!isLast && (
-                  <div className="absolute left-[13px] top-[50px] w-px h-[calc(100%+4px)] bg-[#262626]" />
+                  <div className="absolute left-[13px] top-[50px] w-px h-[calc(100%+4px)] bg-[#2F5F7A]" />
                 )}
 
                 <div
@@ -118,8 +118,8 @@ export function SkillExecutionTimeline({
                   {isRunning && (
                     <div className="absolute -top-1 -right-1">
                       <span className="flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2E86AB] opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#2E86AB]"></span>
                       </span>
                     </div>
                   )}
@@ -139,7 +139,7 @@ export function SkillExecutionTimeline({
                             <div className={`text-sm ${styles.text}`}>
                               {skill.name}
                             </div>
-                            <div className="text-xs text-[#71717a] mt-0.5">
+                            <div className="text-xs text-[#8FA7B5] mt-0.5">
                               {skill.description}
                             </div>
                           </div>
@@ -147,12 +147,12 @@ export function SkillExecutionTimeline({
 
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
                           <span
-                            className={`text-xs px-2 py-0.5 rounded-full border border-[#262626] ${styles.text}`}
+                            className={`text-xs px-2 py-0.5 rounded-full border border-[#2F5F7A] ${styles.text}`}
                           >
                             {getStatusLabel(skill.status)}
                           </span>
                           {skill.duration && (
-                            <span className="text-xs text-[#71717a]">
+                            <span className="text-xs text-[#8FA7B5]">
                               {skill.duration}
                             </span>
                           )}
@@ -168,18 +168,18 @@ export function SkillExecutionTimeline({
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2.5 border-t border-[#262626]">
+      <div className="px-4 py-2.5 border-t border-[#2F5F7A]">
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span className="text-[#71717a]">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#59C3C3]" />
+            <span className="text-[#8FA7B5]">
               {skills.filter((s) => s.status === "completed").length} Completed
             </span>
           </div>
           {skills.some((s) => s.status === "running") && (
             <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-              <span className="text-[#71717a]">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#2E86AB]" />
+              <span className="text-[#8FA7B5]">
                 {skills.filter((s) => s.status === "running").length} Running
               </span>
             </div>
@@ -187,7 +187,7 @@ export function SkillExecutionTimeline({
           {skills.some((s) => s.status === "failed") && (
             <div className="flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-              <span className="text-[#71717a]">
+              <span className="text-[#8FA7B5]">
                 {skills.filter((s) => s.status === "failed").length} Failed
               </span>
             </div>

@@ -34,24 +34,24 @@ export function ExecutionPanel({ steps, confidence }: ExecutionPanelProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
-        return "border-blue-500 bg-blue-500/10 text-blue-400";
+        return "border-[#2E86AB] bg-[#2E86AB]/10 text-[#2E86AB]";
       case "complete":
-        return "border-green-500 bg-green-500/10 text-green-400";
+        return "border-[#59C3C3] bg-[#59C3C3]/10 text-[#59C3C3]";
       case "pending":
-        return "border-gray-700 bg-gray-800/50 text-gray-500";
+        return "border-[#2F5F7A] bg-[#163A52]/50 text-[#8FA7B5]";
       default:
-        return "border-gray-700 bg-gray-800/50 text-gray-400";
+        return "border-[#2F5F7A] bg-[#163A52]/50 text-[#C7D2DA]";
     }
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-950 border-l border-gray-800">
-      <div className="px-4 py-3 border-b border-gray-800">
-        <h3 className="text-white flex items-center gap-2">
-          <Clock className="w-4 h-4 text-blue-400" />
+    <div className="h-full flex flex-col bg-[#0B1E2D] border-l border-[#2F5F7A]">
+      <div className="px-4 py-3 border-b border-[#2F5F7A]">
+        <h3 className="text-[#F1F5F9] flex items-center gap-2">
+          <Clock className="w-4 h-4 text-[#2E86AB]" />
           Execution Trace
         </h3>
-        <p className="text-xs text-gray-500 mt-1">Live agent processing</p>
+        <p className="text-xs text-[#8FA7B5] mt-1">Live agent processing</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -63,14 +63,14 @@ export function ExecutionPanel({ steps, confidence }: ExecutionPanelProps) {
             <div
               key={index}
               className={`relative border rounded-lg p-3 ${statusColor} ${
-                isActive ? "shadow-lg shadow-blue-500/20" : ""
+                isActive ? "" : ""
               }`}
             >
               {isActive && (
                 <div className="absolute -top-1 -right-1">
                   <span className="flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2E86AB] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#2E86AB]"></span>
                   </span>
                 </div>
               )}
@@ -92,14 +92,14 @@ export function ExecutionPanel({ steps, confidence }: ExecutionPanelProps) {
       </div>
 
       {confidence !== undefined && (
-        <div className="px-4 py-3 border-t border-gray-800">
+        <div className="px-4 py-3 border-t border-[#2F5F7A]">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-400">Confidence Score</span>
-            <span className="text-green-400">{confidence}%</span>
+            <span className="text-sm text-[#C7D2DA]">Confidence Score</span>
+            <span className="text-[#59C3C3]">{confidence}%</span>
           </div>
-          <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+          <div className="w-full bg-[#2F5F7A] rounded-full h-2 overflow-hidden">
             <div
-              className="bg-gradient-to-r from-blue-500 to-green-500 h-full rounded-full transition-all duration-500 shadow-lg shadow-green-500/20"
+              className="bg-gradient-to-r from-[#2E86AB] to-[#59C3C3] h-full rounded-full transition-all duration-500"
               style={{ width: `${confidence}%` }}
             />
           </div>

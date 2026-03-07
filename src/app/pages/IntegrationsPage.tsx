@@ -12,6 +12,7 @@ const ICONS: Record<string, string> = {
   slack: "\u{1F4AC}",
   github: "\u{1F419}",
   jira: "\u{1F4CB}",
+  replit: "\u{1F680}",
 };
 
 export default function IntegrationsPage() {

@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from models import Action, AgentEvent, AgentRun, AgentUIRun, AgentUIRunEvent, ClassificationSchema, FeedbackEvent, GoogleDriveConfig, Integration, LLMConfig, MetricsEvent, RunTelemetry, ServiceNowConfig, Skill, Tenant, TenantLLMAssignment, UseCase, UseCaseRun
+from models import Action, AgentEvent, AgentRun, AgentUIRun, AgentUIRunEvent, ClassificationSchema, FeedbackEvent, GoogleDriveConfig, Integration, LLMConfig, LLMUsageEvent, MetricsEvent, ReplitConfig, RunTelemetry, ServiceNowConfig, Skill, Tenant, TenantLLMAssignment, UseCase, UseCaseRun
 
 
 class TenantStore(ABC):
@@ -47,6 +47,14 @@ class ServiceNowConfigStore(ABC):
 
     @abstractmethod
     async def upsert(self, tenant_id: str, **kwargs: Any) -> ServiceNowConfig: ...
+
+
+class ReplitConfigStore(ABC):
+    @abstractmethod
+    async def get_by_tenant(self, tenant_id: str) -> Optional[ReplitConfig]: ...
+
+    @abstractmethod
+    async def upsert(self, tenant_id: str, **kwargs: Any) -> ReplitConfig: ...
 
 
 class LLMConfigStore(ABC):
@@ -229,6 +237,20 @@ class AgentUIRunEventStore(ABC):
 
     @abstractmethod
     async def list_for_run(self, run_id: str) -> list[AgentUIRunEvent]: ...
+
+
+class LLMUsageStore(ABC):
+    @abstractmethod
+    async def create(self, event: LLMUsageEvent) -> LLMUsageEvent: ...
+
+    @abstractmethod
+    async def list_for_tenant(self, tenant_id: str) -> list[LLMUsageEvent]: ...
+
+    @abstractmethod
+    async def list_for_run(self, run_id: str) -> list[LLMUsageEvent]: ...
+
+    @abstractmethod
+    async def list_all(self) -> list[LLMUsageEvent]: ...
 
 
 class ActionStore(ABC):

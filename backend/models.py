@@ -33,6 +33,7 @@ class ClassificationSchema(BaseModel):
 class GoogleDriveConfig(BaseModel):
     tenant_id: str
     root_folder_id: str
+    client_id: Optional[str] = None
     folder_name: Optional[str] = None
     scaffolded: bool = False
     scaffolded_at: Optional[datetime] = None
@@ -47,12 +48,21 @@ class ServiceNowConfig(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class ReplitConfig(BaseModel):
+    tenant_id: str
+    connect_sid: str
+    username: str = ""
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class LLMConfig(BaseModel):
     id: str
     label: str
     provider: str          # "anthropic", "openai", etc.
     api_key: str
     model: str
+    input_token_cost: float = 0.0   # $ per 1k tokens
+    output_token_cost: float = 0.0  # $ per 1k tokens
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -91,6 +101,8 @@ class CreateLLMConfigRequest(BaseModel):
     provider: str
     api_key: str
     model: str
+    input_token_cost: float = 0.0
+    output_token_cost: float = 0.0
 
 
 class UpdateLLMConfigRequest(BaseModel):
@@ -98,6 +110,8 @@ class UpdateLLMConfigRequest(BaseModel):
     provider: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
+    input_token_cost: Optional[float] = None
+    output_token_cost: Optional[float] = None
 
 
 class AssignLLMConfigRequest(BaseModel):
@@ -385,11 +399,12 @@ class ObservabilityTrendsResponse(BaseModel):
 
 INTEGRATION_CATALOG = {
     "servicenow": {"name": "ServiceNow", "description": "IT service management platform", "config_fields": ["instance_url", "username", "password"]},
-    "google-drive": {"name": "Google Drive", "description": "Cloud storage and file sharing", "config_fields": ["root_folder_id", "folder_name"]},
+    "google-drive": {"name": "Google Drive", "description": "Cloud storage and file sharing", "config_fields": ["client_id", "root_folder_id"]},
     "salesforce": {"name": "Salesforce", "description": "Customer relationship management", "config_fields": ["instance_url", "username", "password"]},
     "slack": {"name": "Slack", "description": "Team communication platform", "config_fields": ["webhook_url"]},
-    "github": {"name": "GitHub", "description": "Code repository and collaboration", "config_fields": ["token", "org"]},
+    "github": {"name": "GitHub", "description": "Code repository and collaboration", "config_fields": ["token", "org", "repo"]},
     "jira": {"name": "Jira", "description": "Project tracking and management", "config_fields": ["instance_url", "username", "api_token"]},
+    "replit": {"name": "Replit", "description": "Application builder and deployment platform", "config_fields": ["connect_sid", "username"]},
 }
 
 
@@ -441,6 +456,8 @@ TOOL_CATALOG = [
     # Jira
     {"tool_id": "jira.search_issues", "integration_type": "jira", "name": "Search Issues", "description": "Search Jira issues with JQL", "input_schema": {"jql": "string"}, "output_schema": {"issues": "array"}},
     {"tool_id": "jira.get_issue", "integration_type": "jira", "name": "Get Issue", "description": "Get details for a specific Jira issue", "input_schema": {"issue_key": "string"}, "output_schema": {"issue": "object"}},
+    # Replit
+    {"tool_id": "replit.build_application", "integration_type": "replit", "name": "Build Application", "description": "Build and deploy an application on Replit", "input_schema": {"app_name": "string", "description": "string", "tech_stack": "string"}, "output_schema": {"project_id": "string", "repl_url": "string"}},
 ]
 
 TOOL_CATALOG_BY_ID = {t["tool_id"]: t for t in TOOL_CATALOG}
@@ -571,6 +588,7 @@ class AgentUIRun(BaseModel):
     result: str | None = None
     confidence: float | None = None
     skills_used: list[str] = Field(default_factory=list)
+    total_cost: float = 0.0          # aggregated cost across all llm_usage events
     status: Literal["running", "completed", "error"] = "running"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -578,9 +596,14 @@ class AgentUIRun(BaseModel):
 class AgentUIRunEvent(BaseModel):
     id: str                          # "arevt_" + uuid hex[:12]
     run_id: str
-    event_type: str                  # reasoning | use_case_selected | skill_started | etc.
+    event_type: str                  # reasoning | use_case_selected | skill_started | llm_usage | etc.
     payload: dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # LLM usage fields (populated when event_type == "llm_usage")
+    model: str | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    cost_usd: float | None = None
 
 
 # --- Actions ---
@@ -635,3 +658,81 @@ class UpdateActionRequest(BaseModel):
 class ExecuteActionRequest(BaseModel):
     run_id: str = ""
     input: dict[str, Any] = Field(default_factory=dict)
+
+
+# --- LLM Usage / Cost Ledger ---
+
+
+LLM_PRICING: dict[str, dict[str, float]] = {
+    # OpenAI — 5.x / reasoning models
+    "o3": {"input": 0.010 / 1000, "output": 0.040 / 1000},
+    "o3-mini": {"input": 0.001 / 1000, "output": 0.004 / 1000},
+    "o3-pro": {"input": 0.020 / 1000, "output": 0.080 / 1000},
+    "o4-mini": {"input": 0.001 / 1000, "output": 0.004 / 1000},
+    "gpt-5": {"input": 0.010 / 1000, "output": 0.030 / 1000},
+    # OpenAI — 4.x models
+    "gpt-4o": {"input": 0.005 / 1000, "output": 0.015 / 1000},
+    "gpt-4o-mini": {"input": 0.00015 / 1000, "output": 0.0006 / 1000},
+    # Anthropic
+    "claude-3-sonnet": {"input": 0.003 / 1000, "output": 0.015 / 1000},
+    "claude-3-haiku": {"input": 0.00025 / 1000, "output": 0.00125 / 1000},
+    "claude-sonnet-4-20250514": {"input": 0.003 / 1000, "output": 0.015 / 1000},
+    "claude-haiku-3-5-20241022": {"input": 0.00025 / 1000, "output": 0.00125 / 1000},
+}
+
+# Backward-compat alias
+MODEL_PRICING = LLM_PRICING
+
+
+import re as _re
+
+_DATE_SUFFIX_RE = _re.compile(r"-\d{4,8}$")
+_DEFAULT_PRICING = {"input": 0.003 / 1000, "output": 0.015 / 1000}
+
+
+def normalize_model_name(model: str) -> str:
+    """Normalize a model name for pricing lookup.
+
+    APIs often return versioned names like ``gpt-4o-2024-08-06`` or
+    ``claude-sonnet-4-20250514``.  We try the exact name first, then
+    strip trailing date suffixes to match the base key in LLM_PRICING.
+    """
+    if model in LLM_PRICING:
+        return model
+    # Strip trailing date segment (e.g. -20250514 or -2024-08-06)
+    base = _DATE_SUFFIX_RE.sub("", model)
+    if base in LLM_PRICING:
+        return base
+    # Try progressively shorter prefixes (e.g. gpt-4o-2024-08-06 → gpt-4o-2024 → gpt-4o)
+    parts = model.split("-")
+    for i in range(len(parts) - 1, 0, -1):
+        candidate = "-".join(parts[:i])
+        if candidate in LLM_PRICING:
+            return candidate
+    return model
+
+
+def calculate_llm_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """Compute cost locally from the pricing registry. Never relies on provider-reported cost."""
+    key = normalize_model_name(model)
+    pricing = LLM_PRICING.get(key, _DEFAULT_PRICING)
+    return prompt_tokens * pricing["input"] + completion_tokens * pricing["output"]
+
+
+# Backward-compat alias
+estimate_cost = calculate_llm_cost
+
+
+class LLMUsageEvent(BaseModel):
+    id: str                          # "llmu_" + uuid hex[:12]
+    tenant_id: str
+    run_id: str = ""
+    use_case: str = ""
+    skill: str = ""
+    model: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cost: float = 0.0
+    latency_ms: int = 0
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

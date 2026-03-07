@@ -9,8 +9,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from models import AgentUIRun, AgentUIRunEvent, UseCaseRun, UseCaseRunStep, ToolCallRecord
+from models import AgentUIRun, AgentUIRunEvent, LLMUsageEvent, calculate_llm_cost, UseCaseRun, UseCaseRunStep, ToolCallRecord
 from services.tool_executor import execute_tool
+from services.snow_to_replit import refine_prompt as _refine_prompt, approve_and_create_repl
 
 router = APIRouter(prefix="/api/admin/{tenant_id}/agent", tags=["agent"])
 
@@ -176,6 +177,8 @@ def _summarize_tool_result(tool_id: str, tool_result: dict) -> str:
         return f"Found {len(tool_result['articles'])} knowledge base article(s)"
     if "files" in tool_result:
         return f"Found {len(tool_result['files'])} document(s)"
+    if "repl_url" in tool_result:
+        return f"Replit project ready — {tool_result.get('app_name', 'app')} ({tool_result.get('tech_stack', '')})"
     return f"{tool_id}: completed"
 
 
@@ -198,7 +201,15 @@ async def stream_agent(tenant_id: str, body: AgentAskRequest, request: Request):
         )
         await app.state.agent_ui_run_store.create(run)
 
-        async def _emit(event_type: str, data: dict) -> str:
+        async def _emit(
+            event_type: str,
+            data: dict,
+            *,
+            model: str | None = None,
+            prompt_tokens: int | None = None,
+            completion_tokens: int | None = None,
+            cost_usd: float | None = None,
+        ) -> str:
             """Yield an SSE event and persist it."""
             await app.state.agent_ui_run_event_store.create(
                 AgentUIRunEvent(
@@ -206,6 +217,10 @@ async def stream_agent(tenant_id: str, body: AgentAskRequest, request: Request):
                     run_id=run.id,
                     event_type=event_type,
                     payload=data,
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_usd=cost_usd,
                 )
             )
             return _sse_event(event_type, data)
@@ -269,9 +284,21 @@ async def stream_agent(tenant_id: str, body: AgentAskRequest, request: Request):
             })
             await asyncio.sleep(0.05)
 
+            # Resolve tenant's active LLM model for usage tracking
+            _active_model = "claude-sonnet-4-20250514"
+            try:
+                _active_llm = await app.state.llm_assignment_store.get_active(tenant_id)
+                if _active_llm:
+                    _cfg = await app.state.llm_config_store.get(_active_llm.llm_config_id)
+                    if _cfg:
+                        _active_model = _cfg.model
+            except Exception:
+                pass
+
             # Step 4: Execute skills sequentially
             results: list[str] = []
             skills_used: list[str] = []
+            run_total_cost: float = 0.0
 
             for step in best_uc.steps:
                 skill = await app.state.skill_store.get(step.skill_id)
@@ -281,6 +308,8 @@ async def stream_agent(tenant_id: str, body: AgentAskRequest, request: Request):
                 skills_used.append(skill.name)
                 yield await _emit("skill_started", {"skill": skill.name})
                 await asyncio.sleep(0.05)
+
+                skill_start = time.time()
 
                 for tool_id in skill.tools:
                     yield await _emit("tool_called", {"tool": tool_id, "skill": skill.name})
@@ -304,6 +333,46 @@ async def stream_agent(tenant_id: str, body: AgentAskRequest, request: Request):
                     })
                     await asyncio.sleep(0.05)
 
+                skill_latency_ms = int((time.time() - skill_start) * 1000)
+
+                # --- LLM usage capture ---
+                prompt_tokens = len(prompt.split()) * 4 + 200  # estimate
+                completion_tokens = sum(len(r.split()) for r in results[-len(skill.tools or ["x"]):]) * 4 + 100
+                cost = calculate_llm_cost(_active_model, prompt_tokens, completion_tokens)
+                run_total_cost += cost
+
+                # Persist llm_usage event on the AgentUIRunEvent record
+                llm_usage_data = {
+                    "model": _active_model,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost": round(cost, 8),
+                    "skill": skill.name,
+                }
+                yield await _emit(
+                    "llm_usage",
+                    llm_usage_data,
+                    model=_active_model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_usd=cost,
+                )
+
+                # Also persist to the cost-ledger store
+                await app.state.llm_usage_store.create(LLMUsageEvent(
+                    id=f"llmu_{uuid.uuid4().hex[:12]}",
+                    tenant_id=tenant_id,
+                    run_id=run.id,
+                    use_case=best_uc.name,
+                    skill=skill.name,
+                    model=_active_model,
+                    input_tokens=prompt_tokens,
+                    output_tokens=completion_tokens,
+                    total_tokens=prompt_tokens + completion_tokens,
+                    cost=cost,
+                    latency_ms=skill_latency_ms,
+                ))
+
                 yield await _emit("skill_completed", {"skill": skill.name})
                 await asyncio.sleep(0.05)
 
@@ -325,6 +394,7 @@ async def stream_agent(tenant_id: str, body: AgentAskRequest, request: Request):
                 status="completed",
                 selected_use_case=best_uc.name,
                 skills_used=skills_used,
+                total_cost=round(run_total_cost, 8),
             )
         except Exception:
             await app.state.agent_ui_run_store.update(run.id, status="error")
@@ -339,3 +409,46 @@ async def stream_agent(tenant_id: str, body: AgentAskRequest, request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# --- Phase 2: Prompt refinement ---
+
+class RefinePromptRequest(BaseModel):
+    current_prompt: str
+    user_feedback: str
+    catalog_data: str
+
+
+@router.post("/refine-prompt")
+async def refine_prompt_endpoint(tenant_id: str, body: RefinePromptRequest, request: Request):
+    await _require_tenant(tenant_id, request)
+    result = await _refine_prompt(
+        tenant_id=tenant_id,
+        current_prompt=body.current_prompt,
+        user_feedback=body.user_feedback,
+        catalog_data=body.catalog_data,
+        app=request.app,
+    )
+    if result.get("status") == "error":
+        # Return the error in the response body so the frontend can show it gracefully
+        return result
+    return result
+
+
+# --- Phase 3: Approve & create Replit ---
+
+class ApproveReplitRequest(BaseModel):
+    approved_prompt: str
+
+
+@router.post("/approve-replit")
+async def approve_replit_endpoint(tenant_id: str, body: ApproveReplitRequest, request: Request):
+    await _require_tenant(tenant_id, request)
+    result = await approve_and_create_repl(
+        tenant_id=tenant_id,
+        approved_prompt=body.approved_prompt,
+        app=request.app,
+    )
+    if result.get("status") == "error":
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed to create repl"))
+    return result

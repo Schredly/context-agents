@@ -19,6 +19,7 @@ import ActionsCatalogPage from './pages/ActionsCatalogPage';
 import CreateEditActionPage from './pages/CreateEditActionPage';
 import ActionVisibilityRulesPage from './pages/ActionVisibilityRulesPage';
 import AgentUIActionsPage from './pages/AgentUIActionsPage';
+import CostLedgerPage from './pages/CostLedgerPage';
 
 export const router = createBrowserRouter([
   {
@@ -35,6 +36,10 @@ export const router = createBrowserRouter([
       },
       {
         path: 'tenants/create',
+        Component: CreateTenantPage,
+      },
+      {
+        path: 'tenants/:id',
         Component: CreateTenantPage,
       },
       {
@@ -100,6 +105,10 @@ export const router = createBrowserRouter([
       {
         path: 'observability',
         Component: ObservabilityPage,
+      },
+      {
+        path: 'observability/cost-ledger',
+        Component: CostLedgerPage,
       },
       {
         path: 'console',

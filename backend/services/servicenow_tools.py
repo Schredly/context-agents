@@ -181,6 +181,54 @@ async def create_incident(tenant_id: str, payload: dict, app) -> dict:
     }
 
 
+async def create_knowledge_article(tenant_id: str, payload: dict, app) -> dict:
+    """Create a new ServiceNow knowledge base article.
+
+    payload keys: title (str), content (str), category (str, optional)
+    """
+    cfg = await _get_snow_config(tenant_id, app)
+    title = payload.get("title", "")
+    content = payload.get("content", "")
+    category = payload.get("category", "")
+
+    url = f"{cfg['instance_url']}/api/now/table/kb_knowledge"
+
+    body: dict = {
+        "short_description": title,
+        "text": content,
+        "workflow_state": "draft",
+    }
+    if category:
+        body["category"] = category
+
+    t0 = time.monotonic()
+    async with httpx.AsyncClient(timeout=SNOW_TIMEOUT) as client:
+        res = await client.post(
+            url,
+            headers={"Content-Type": "application/json", "Accept": "application/json", "Authorization": cfg["auth_header"]},
+            json=body,
+        )
+    latency_ms = int((time.monotonic() - t0) * 1000)
+
+    if not res.is_success:
+        logger.error("ServiceNow create_knowledge_article failed: %d", res.status_code)
+        return {"status": "error", "error": f"HTTP {res.status_code}", "latency_ms": latency_ms}
+
+    try:
+        record = res.json().get("result", {})
+    except Exception:
+        return {"status": "error", "error": "Instance unavailable (non-JSON response — may be hibernating)", "latency_ms": latency_ms}
+
+    return {
+        "status": "ok",
+        "sys_id": record.get("sys_id", ""),
+        "number": record.get("number", ""),
+        "short_description": record.get("short_description", ""),
+        "workflow_state": record.get("workflow_state", "draft"),
+        "latency_ms": latency_ms,
+    }
+
+
 async def add_work_note(tenant_id: str, payload: dict, app) -> dict:
     """Add a work note to a ServiceNow incident.
 

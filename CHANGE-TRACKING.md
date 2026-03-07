@@ -2353,3 +2353,219 @@ Transformed agent actions from static buttons into context-aware recommendations
 - Frontend: After submitting a prompt in the Agent UI, actions panel shows contextually relevant actions under "Recommended" with a star badge, and remaining actions under "Other Actions".
 
 *Next change will be #034.*
+
+---
+
+## #034 — 2026-03-05 — Agent UI Nautical Color Scheme
+
+**What happened:**
+Restyled all Agent UI components from the default dark theme to a consistent nautical blue palette. Every component under `src/app/components/agentui/` and the `AgentUIPage` now uses the same color system.
+
+**Color palette:**
+- Background: `#0B1E2D` (deep navy)
+- Card/surface: `#102A43` (dark blue-grey)
+- Borders: `#2F5F7A` (steel blue)
+- Primary text: `#F1F5F9` (near-white)
+- Secondary text: `#C7D2DA` (light grey-blue)
+- Muted text: `#8FA7B5` (grey-blue)
+- Accent teal: `#59C3C3`
+- Accent blue: `#2E86AB`
+- Accent gold: `#F6C667`
+
+**Files changed:**
+- `src/app/components/agentui/TopBar.tsx` — Navy background, steel-blue borders, teal status dot
+- `src/app/components/agentui/ChatMessage.tsx` — User messages get `#102A43` bubble, agent messages get `#0B1E2D`
+- `src/app/components/agentui/InputPanel.tsx` — Dark input field, steel-blue border, teal send button
+- `src/app/components/agentui/AgentReasoning.tsx` — Nautical step indicators with teal/blue/gold status colors
+- `src/app/components/agentui/SelectedUseCase.tsx` — Navy card with steel-blue border
+- `src/app/components/agentui/SkillExecutionTimeline.tsx` — Nautical timeline connectors and status pills
+- `src/app/components/agentui/ToolsUsed.tsx` — Dark tool cards with status code badges
+- `src/app/components/agentui/AIRecommendation.tsx` — Navy recommendation card with teal accents
+- `src/app/components/agentui/AgentActions.tsx` — Dark action buttons with nautical hover states
+- `src/app/components/agentui/AgentResponseCard.tsx` — Navy response card
+- `src/app/components/agentui/ExecutionPanel.tsx` — Dark execution panel
+- `src/app/components/agentui/MobileAgentView.tsx` — Mobile view restyled to match
+- `src/app/pages/AgentUIPage.tsx` — Navy background, custom scrollbar with `#2F5F7A` thumb, two-column layout with execution trace panel
+
+---
+
+## #035 — 2026-03-05 — Settings Page Redesign: LLM Providers Section
+
+**What happened:**
+Replaced the old tabbed Settings page (LLM Setup + Tenant Intelligence) with a new three-section AI Infrastructure control panel. This entry covers the LLM Providers section.
+
+**LLM Providers table columns:**
+- Provider (icon + name)
+- Model
+- Connection Status (pill badge)
+- Token Cost (input/output per 1K tokens)
+- Actions (edit/delete)
+
+**Add Provider slide-out panel:**
+- Right-side overlay panel with: Provider selector, API Key, Model selector, Token Pricing (input/output cost fields), Test Connection button, Save button
+- Auto-generates label from `{Provider} — {Model}` when label is left blank
+- Save guard only requires API Key and Model
+
+**Key implementation details:**
+- `DEFAULT_MODEL_PRICING` constant provides default costs for new configs (e.g., Claude Sonnet: $0.003/$0.015)
+- Existing configs display their persisted pricing from the backend
+- All buttons use explicit `bg-gray-900 text-white` instead of CSS variable `bg-primary` for reliability
+- Right sidebar shows LLM Cost Snapshot summary
+
+**Files changed:**
+- `src/app/pages/SettingsPage.tsx` — Complete rewrite (~1200 lines)
+
+---
+
+## #036 — 2026-03-05 — Settings Page Redesign: Tenant Model Access Section
+
+**What happened:**
+Added the Tenant Model Access section to the Settings page. A matrix table with rows = tenants and columns = LLM models, where each cell shows assignment status.
+
+**Matrix behavior:**
+- Each cell shows "Enabled" (green pill) or "Disabled" (grey pill)
+- Clicking a cell opens a positioned popover panel with:
+  - **Enabled toggle** — assigns/unassigns the model for that tenant
+  - **Default model toggle** — sets this as the tenant's active model (star icon)
+  - **Fallback model selector** — dropdown to pick a fallback model (client-side only, no backend field)
+- Star icon on the cell indicates the tenant's default/active model
+- RotateCcw icon indicates a configured fallback
+
+**State management:**
+- `assignPanel` state tracks which cell popover is open
+- `fallbackMap` state: `Record<string, string>` for client-side fallback tracking (keyed by `tenantId-configId`)
+
+**Files changed:**
+- `src/app/pages/SettingsPage.tsx` — Added matrix section
+
+---
+
+## #037 — 2026-03-05 — Persist Token Pricing on LLM Config
+
+**What happened:**
+Added `input_token_cost` and `output_token_cost` fields to the `LLMConfig` model so token pricing is persisted per provider rather than hardcoded.
+
+**Backend changes:**
+- `backend/models.py` — Added `input_token_cost: float = 0.0` and `output_token_cost: float = 0.0` to `LLMConfig`, `CreateLLMConfigRequest` (default `0.0`), and `UpdateLLMConfigRequest` (Optional)
+- `backend/routers/llm_configs.py` — Pass `input_token_cost` and `output_token_cost` from request body to `LLMConfig` constructor on create
+- `backend/bootstrap/demo_setup.py` — Demo Anthropic config seeded with `input_token_cost=0.003, output_token_cost=0.015`
+
+**Frontend changes:**
+- `src/app/services/api.ts` — `LLMConfigResponse` includes `input_token_cost` and `output_token_cost`. `createLLMConfig()` and `updateLLMConfig()` accept pricing params.
+- `src/app/pages/SettingsPage.tsx` — Provider table reads pricing from persisted config; `FormState` includes `inputTokenCost` and `outputTokenCost` string fields; `handleSave()` sends pricing to backend.
+
+**Compatibility note:**
+- `calculate_llm_cost()` in the execution plane still uses its own hardcoded `LLM_PRICING` dict — unaffected by these config fields (by design).
+- `CLAUDE_API_KEY` fallback in agent orchestration remains intact.
+
+---
+
+## #038 — 2026-03-06 — Agent UI Branding: Love-Boat.AI
+
+**What happened:**
+Rebranded the Agent UI from "Enterprise" to "Love-Boat.AI" and added the Love Boat heart/wave logo.
+
+**Changes:**
+- `src/app/pages/AgentUIPage.tsx` — Replaced all 3 occurrences: `agentName="Love-Boat.AI Agent"`, heading "Ask the Love-Boat.AI Agent", category "Love-Boat.AI Operations"
+- `src/app/components/agentui/TopBar.tsx` — Replaced the `Activity` icon with `<img src="/lb.png" alt="Love-Boat.AI" />` in the far-left position. Uses `mix-blend-mode: screen` to drop white background against the dark navy UI. Removed `Activity` icon import from lucide-react.
+- `public/lb.png` — Love Boat heart/wave logo image
+
+---
+
+## #039 — 2026-03-06 — Remove Confidence Score from AIRecommendation
+
+**What happened:**
+Removed the Confidence Score section (progress bar with percentage and label) from the `AIRecommendation` component. The section had a `TrendingUp` icon, a progress bar, a percentage display, and a confidence label (Very High/High/Medium/Low).
+
+**Files changed:**
+- `src/app/components/agentui/AIRecommendation.tsx` — Removed the "Confidence Score" `<div>` block. The `getConfidenceLevel()` and `getPriorityStyles()` helper functions remain (used by other parts of the component). Removed `TrendingUp` from the lucide-react import.
+
+---
+
+## #040 — 2026-03-06 — Integration Config Page Overhaul
+
+**What happened:**
+Overhauled the Integration Config page with a full-featured configuration UI including real-time field editing, connection testing, and enable/disable controls.
+
+**Files changed:**
+- `src/app/pages/IntegrationConfigPage.tsx` — Enhanced from a minimal placeholder to a full config editor
+- `backend/routers/integrations.py` — Extended integration catalog and configuration endpoints
+- `backend/services/google_drive_tools.py` — Enhanced Google Drive tooling
+- `backend/services/servicenow_tools.py` — Added ServiceNow tool functions
+- `backend/services/action_executor.py` — Updated action execution logic
+
+---
+
+## #041 — 2026-03-06 — Fix Tenant Configuration (Edit Mode)
+
+**What happened:**
+Fixed a bug where clicking the Settings/Configure button on an existing tenant opened a blank "Create Tenant" form with no data loaded. Users could not see the tenant name/ID, add integrations, or manage use cases.
+
+**Root cause:**
+`TenantsPage.tsx` line 100 navigated to `/tenants/create` (hardcoded) instead of passing the tenant ID.
+
+**Fix — 3 files:**
+
+1. `src/app/pages/TenantsPage.tsx` — Changed `navigate('/tenants/create')` → `navigate('/tenants/${tenant.id}')` on the Settings button.
+
+2. `src/app/routes.tsx` — Added new route `tenants/:id` pointing to `CreateTenantPage`, alongside the existing `tenants/create` route.
+
+3. `src/app/pages/CreateTenantPage.tsx` — Rewrote to support both create and edit modes:
+   - Uses `useParams()` to detect `:id` parameter → triggers edit mode
+   - **Step 1 (Tenant Details)**: In edit mode, loads tenant via `getTenant(id)` and pre-fills Name, Tenant ID (read-only), and Status
+   - **Step 2 (Integrations)**: Loads existing integrations via `getIntegrations()` and the integration catalog via `getIntegrationCatalog()`. Shows each integration with type label, enabled/disabled status, connection status, Configure and Delete buttons. Lists available catalog entries with Add buttons.
+   - **Step 3 (Use Cases)**: Loads use cases via `getUseCases()`. Shows each with name, truncated description, status badge, step count, Edit and Delete buttons. Includes "Create Use Case" button.
+   - **Step 4 (Summary)**: Shows count of integrations and use cases configured. Button label changes from "Create Tenant" to "Done" in edit mode.
+   - In edit mode, step indicators are clickable for direct navigation between steps.
+
+**New imports in CreateTenantPage:**
+`getTenant`, `createTenant`, `getIntegrations`, `getIntegrationCatalog`, `createIntegration`, `deleteIntegration`, `getUseCases`, `deleteUseCase` from `api.ts`. Lucide icons: `Loader2`, `Plus`, `Trash2`, `Plug`, `BookOpen`.
+
+---
+
+## #042 — 2026-03-06 — Admin Layout & Backend Infrastructure Updates
+
+**What happened:**
+Several supporting infrastructure changes across backend and frontend that accompanied the above features.
+
+**Backend:**
+- `backend/main.py` — Registered new stores on `app.state` (agent run store, agent run event store)
+- `backend/models.py` — Added `AgentRun` and `AgentRunEvent` models for persisting agent UI runs and their SSE events
+- `backend/store/interface.py` — Added `AgentRunStore` and `AgentRunEventStore` abstract base classes
+- `backend/store/memory.py` — Added `InMemoryAgentRunStore` and `InMemoryAgentRunEventStore` implementations
+- `backend/store/__init__.py` — Exported new store classes
+- `backend/routers/__init__.py` — Updated router registration
+- `backend/routers/agent.py` — Persists `AgentRun` and `AgentRunEvent` records during SSE streaming; emits `run_started` event with `run_id`
+
+**Frontend:**
+- `src/app/components/Layout.tsx` — Updated admin layout/navigation structure
+- `src/app/services/api.ts` — Added `input_token_cost`/`output_token_cost` to `LLMConfigResponse`, updated `createLLMConfig()` and `updateLLMConfig()` signatures, added integration and use-case API function types
+- `src/app/services/agentStream.ts` — Added `onRunStarted` handler to `StreamHandlers` interface
+
+*Next change will be #044.*
+
+---
+
+## #043 — 2026-03-07 — ServiceNow Catalog to Replit (by Title)
+
+**What happened:**
+Added a new action "ServiceNow Catalog to Replit" that lets users fetch a ServiceNow catalog by name and convert it into a Replit app. Unlike the existing "ServiceNow to Replit" action (which uses a hardcoded service URL), this action asks the user for the catalog title, transforms spaces to `%20`, calls the `catalogbytitleservice` web service endpoint, then runs the same LLM draft → refine → approve → push-to-Replit flow.
+
+**User flow:**
+1. User types something like "I want to convert my servicenow catalog to replit" → action appears
+2. User clicks the action → agent asks "What is the name of the catalog?"
+3. User types a name (e.g., "Technical Catalog") and hits Enter
+4. Backend transforms to `Technical%20Catalog`, calls `GET https://dev221705.service-now.com/api/1939459/catalogbytitleservice/catalog/Technical%20Catalog`
+5. Payload returns → LLM generates a draft Replit prompt (same prompt header format as existing action)
+6. User can refine the prompt via chat until satisfied
+7. User clicks "Approve & Send to Replit" → repl is created
+
+**Backend:**
+- `backend/services/snow_to_replit.py` — Added `convert_catalog_by_title_to_replit()`: returns `needs_input` when no `catalog_title` provided; when given, URL-encodes spaces, fetches from the `catalogbytitleservice` endpoint, and runs LLM draft generation using the same `_DRAFT_SYSTEM_PROMPT` and `_fetch_catalog` helpers
+- `backend/services/action_executor.py` — Registered `servicenow:catalog_by_title_to_replit` → `snow_to_replit.convert_catalog_by_title_to_replit`
+- `backend/bootstrap/demo_setup.py` — Added "ServiceNow Catalog to Replit" action definition with `catalog_by_title_to_replit` operation, `user_input` source for `catalog_title`, keyword triggers: `convert,servicenow,catalog,replit`
+
+**Frontend:**
+- `src/app/components/agentui/AgentActions.tsx` — Added `NeedsInputPayload` interface and `onNeedsInput` prop; `handleClick` now detects `needs_input` status from backend and fires the callback
+- `src/app/pages/AgentUIPage.tsx` — Added `InputCollectionState` and `inputState`; `handleSendMessage` intercepts input mode to send the user's answer back to the action execute endpoint, then transitions to draft/refine mode; added `handleNeedsInput` callback wired to all `AgentActions` instances
+- `src/app/components/agentui/InputPanel.tsx` — Added `"input"` mode with `inputPrompt` prop for contextual placeholder text and "Submit" button label

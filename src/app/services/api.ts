@@ -428,6 +428,8 @@ export interface LLMConfigResponse {
   provider: string;
   api_key: string;
   model: string;
+  input_token_cost: number;
+  output_token_cost: number;
   created_at: string;
   updated_at: string;
 }
@@ -464,16 +466,32 @@ export function createLLMConfig(
   provider: string,
   apiKey: string,
   model: string,
+  inputTokenCost: number = 0,
+  outputTokenCost: number = 0,
 ): Promise<LLMConfigResponse> {
   return request('/llm-configs', {
     method: 'POST',
-    body: JSON.stringify({ label, provider, api_key: apiKey, model }),
+    body: JSON.stringify({
+      label,
+      provider,
+      api_key: apiKey,
+      model,
+      input_token_cost: inputTokenCost,
+      output_token_cost: outputTokenCost,
+    }),
   });
 }
 
 export function updateLLMConfig(
   configId: string,
-  updates: { label?: string; provider?: string; api_key?: string; model?: string },
+  updates: {
+    label?: string;
+    provider?: string;
+    api_key?: string;
+    model?: string;
+    input_token_cost?: number;
+    output_token_cost?: number;
+  },
 ): Promise<LLMConfigResponse> {
   return request(`/llm-configs/${configId}`, {
     method: 'PUT',
@@ -692,7 +710,7 @@ export function disableIntegration(
 export function testIntegration(
   tenantId: string,
   integrationId: string,
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: boolean; folder_name?: string; detail?: string }> {
   return request(`/admin/${tenantId}/integrations/${integrationId}/test`, {
     method: 'POST',
   });
@@ -1013,6 +1031,56 @@ export function askAgent(
     method: 'POST',
     body: JSON.stringify({ prompt }),
   });
+}
+
+// --- LLM Usage / Cost Ledger ---
+
+export interface LLMUsageRow {
+  id: string;
+  timestamp: string;
+  tenant: string;
+  useCase: string;
+  skill: string;
+  model: string;
+  tokens: number;
+  cost: number;
+  latency: string;
+  runId: string;
+  isGroup?: boolean;
+  count?: number;
+}
+
+export interface LLMUsageSummary {
+  totalCost: number;
+  totalTokens: number;
+  avgCostPerRun: number;
+  executionCount: number;
+  uniqueRuns: number;
+  avgTokensPerExecution: number;
+  mostExpensiveUseCase: string;
+  mostExpensiveUseCaseCost: number;
+}
+
+export function getLLMUsage(
+  tenantId: string,
+  timeFilter: string = '24h',
+): Promise<LLMUsageRow[]> {
+  return request(`/admin/${tenantId}/llm-usage?time_filter=${timeFilter}`);
+}
+
+export function getLLMUsageSummary(
+  tenantId: string,
+  timeFilter: string = '24h',
+): Promise<LLMUsageSummary> {
+  return request(`/admin/${tenantId}/llm-usage/summary?time_filter=${timeFilter}`);
+}
+
+export function getLLMUsageLedger(
+  tenantId: string,
+  timeFilter: string = '24h',
+  groupBy: string = 'none',
+): Promise<LLMUsageRow[]> {
+  return request(`/admin/${tenantId}/llm-usage/ledger?time_filter=${timeFilter}&group_by=${groupBy}`);
 }
 
 // --- ServiceNow Preview + Approve ---
