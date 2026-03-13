@@ -1,12 +1,16 @@
 import uuid
+from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from models import (
+    AddEndpointRequest,
     CreateIntegrationRequest,
     Integration,
+    IntegrationEndpoint,
     INTEGRATION_CATALOG,
+    UpdateEndpointRequest,
     UpdateIntegrationConfigRequest,
 )
 
@@ -33,11 +37,16 @@ def _connection_status(integration: Integration, snow_cfg, drive_cfg, replit_cfg
     return "not-connected"
 
 
-def _serialize(integration: Integration, connection_status: str) -> dict:
+def _serialize(integration: Integration, connection_status: str, catalog: dict | None = None) -> dict:
     data = integration.model_dump()
     data["connection_status"] = connection_status
     data["created_at"] = integration.created_at.isoformat()
     data["updated_at"] = integration.updated_at.isoformat()
+    # Ensure name is populated (backfill for old records without name)
+    if not data.get("name") and catalog:
+        entry = catalog.get(integration.integration_type)
+        if entry:
+            data["name"] = entry["name"]
     return data
 
 
@@ -53,10 +62,13 @@ async def get_catalog():
 
 
 @router.get("/")
-async def list_integrations(tenant_id: str, request: Request):
+async def list_integrations(tenant_id: str, request: Request, filter_tenant: Optional[str] = Query(None)):
     await _require_tenant(tenant_id, request)
     store = request.app.state.integration_store
-    integrations = await store.list_for_tenant(tenant_id)
+    if filter_tenant is not None:
+        integrations = await store.list_filtered(filter_tenant)
+    else:
+        integrations = await store.list_for_tenant(tenant_id)
 
     snow_cfg = await request.app.state.snow_config_store.get_by_tenant(tenant_id)
     drive_cfg = await request.app.state.drive_config_store.get_by_tenant(tenant_id)
@@ -72,6 +84,9 @@ async def list_integrations(tenant_id: str, request: Request):
 # --- Create ---
 
 
+MULTI_INSTANCE_TYPES = {"github"}
+
+
 @router.post("/", status_code=201)
 async def create_integration(tenant_id: str, body: CreateIntegrationRequest, request: Request):
     await _require_tenant(tenant_id, request)
@@ -79,14 +94,22 @@ async def create_integration(tenant_id: str, body: CreateIntegrationRequest, req
         raise HTTPException(status_code=400, detail=f"Unknown integration type: {body.integration_type}")
 
     store = request.app.state.integration_store
-    existing = await store.get_by_type(tenant_id, body.integration_type)
-    if existing is not None:
-        raise HTTPException(status_code=409, detail=f"Integration '{body.integration_type}' already exists for this tenant")
+
+    # Types that allow multiple instances skip the uniqueness check
+    if body.integration_type not in MULTI_INSTANCE_TYPES:
+        existing = await store.get_by_type(tenant_id, body.integration_type)
+        if existing is not None:
+            raise HTTPException(status_code=409, detail=f"Integration '{body.integration_type}' already exists for this tenant")
+
+    # Default name from catalog if not provided
+    default_name = INTEGRATION_CATALOG[body.integration_type]["name"]
+    name = body.name.strip() if body.name else default_name
 
     integration = Integration(
         id=f"int_{uuid.uuid4().hex[:12]}",
         tenant_id=tenant_id,
         integration_type=body.integration_type,
+        name=name,
     )
     created = await store.create(integration)
 
@@ -110,6 +133,59 @@ async def get_integration(tenant_id: str, integration_id: str, request: Request)
     drive_cfg = await request.app.state.drive_config_store.get_by_tenant(tenant_id)
     replit_cfg = await request.app.state.replit_config_store.get_by_tenant(tenant_id)
     return _serialize(integration, _connection_status(integration, snow_cfg, drive_cfg, replit_cfg))
+
+
+# --- Rename ---
+
+
+@router.put("/{integration_id}/name")
+async def rename_integration(
+    tenant_id: str, integration_id: str, body: dict, request: Request
+):
+    await _require_tenant(tenant_id, request)
+    store = request.app.state.integration_store
+    integration = await store.get(integration_id)
+    if integration is None or integration.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    updated = await store.update(integration_id, name=new_name)
+    snow_cfg = await request.app.state.snow_config_store.get_by_tenant(tenant_id)
+    drive_cfg = await request.app.state.drive_config_store.get_by_tenant(tenant_id)
+    replit_cfg = await request.app.state.replit_config_store.get_by_tenant(tenant_id)
+    return _serialize(updated, _connection_status(updated, snow_cfg, drive_cfg, replit_cfg))
+
+
+# --- Reassign tenant ---
+
+
+@router.put("/{integration_id}/tenant")
+async def reassign_tenant(
+    tenant_id: str, integration_id: str, body: dict, request: Request
+):
+    await _require_tenant(tenant_id, request)
+    store = request.app.state.integration_store
+    integration = await store.get(integration_id)
+    if integration is None or integration.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    new_tenant_id = (body.get("tenant_id") or "").strip()
+    if not new_tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id is required")
+
+    # Verify target tenant exists
+    target = await request.app.state.tenant_store.get(new_tenant_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Target tenant not found")
+
+    updated = await store.update(integration_id, tenant_id=new_tenant_id)
+    snow_cfg = await request.app.state.snow_config_store.get_by_tenant(new_tenant_id)
+    drive_cfg = await request.app.state.drive_config_store.get_by_tenant(new_tenant_id)
+    replit_cfg = await request.app.state.replit_config_store.get_by_tenant(new_tenant_id)
+    return _serialize(updated, _connection_status(updated, snow_cfg, drive_cfg, replit_cfg))
 
 
 # --- Update config ---
@@ -325,3 +401,252 @@ async def delete_integration(tenant_id: str, integration_id: str, request: Reque
 
     await request.app.state.integration_store.delete(integration_id)
     return {"ok": True}
+
+
+# --- Webservice Endpoints ---
+
+
+async def _get_integration(tenant_id: str, integration_id: str, request: Request) -> Integration:
+    await _require_tenant(tenant_id, request)
+    integration = await request.app.state.integration_store.get(integration_id)
+    if integration is None or integration.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Integration not found")
+    return integration
+
+
+@router.post("/{integration_id}/endpoints", status_code=201)
+async def add_endpoint(
+    tenant_id: str, integration_id: str, body: AddEndpointRequest, request: Request
+):
+    integration = await _get_integration(tenant_id, integration_id, request)
+    ep = IntegrationEndpoint(
+        id=f"ep_{uuid.uuid4().hex[:8]}",
+        name=body.name,
+        path=body.path,
+        method=body.method.upper(),
+        headers=body.headers,
+        query_params=body.query_params,
+        description=body.description,
+    )
+    updated_endpoints = list(integration.endpoints) + [ep]
+    store = request.app.state.integration_store
+    updated = await store.update(integration_id, endpoints=updated_endpoints)
+
+    snow_cfg = await request.app.state.snow_config_store.get_by_tenant(tenant_id)
+    drive_cfg = await request.app.state.drive_config_store.get_by_tenant(tenant_id)
+    replit_cfg = await request.app.state.replit_config_store.get_by_tenant(tenant_id)
+    return _serialize(updated, _connection_status(updated, snow_cfg, drive_cfg, replit_cfg))
+
+
+@router.put("/{integration_id}/endpoints/{endpoint_id}")
+async def update_endpoint(
+    tenant_id: str, integration_id: str, endpoint_id: str,
+    body: UpdateEndpointRequest, request: Request,
+):
+    integration = await _get_integration(tenant_id, integration_id, request)
+    updated_endpoints = []
+    found = False
+    for ep in integration.endpoints:
+        if ep.id == endpoint_id:
+            found = True
+            data = ep.model_dump()
+            for field, value in body.model_dump(exclude_none=True).items():
+                data[field] = value if field != "method" else value.upper()
+            updated_endpoints.append(IntegrationEndpoint(**data))
+        else:
+            updated_endpoints.append(ep)
+    if not found:
+        raise HTTPException(status_code=404, detail="Endpoint not found")
+
+    store = request.app.state.integration_store
+    updated = await store.update(integration_id, endpoints=updated_endpoints)
+
+    snow_cfg = await request.app.state.snow_config_store.get_by_tenant(tenant_id)
+    drive_cfg = await request.app.state.drive_config_store.get_by_tenant(tenant_id)
+    replit_cfg = await request.app.state.replit_config_store.get_by_tenant(tenant_id)
+    return _serialize(updated, _connection_status(updated, snow_cfg, drive_cfg, replit_cfg))
+
+
+@router.delete("/{integration_id}/endpoints/{endpoint_id}")
+async def delete_endpoint(
+    tenant_id: str, integration_id: str, endpoint_id: str, request: Request
+):
+    integration = await _get_integration(tenant_id, integration_id, request)
+    original_len = len(integration.endpoints)
+    updated_endpoints = [ep for ep in integration.endpoints if ep.id != endpoint_id]
+    if len(updated_endpoints) == original_len:
+        raise HTTPException(status_code=404, detail="Endpoint not found")
+
+    store = request.app.state.integration_store
+    await store.update(integration_id, endpoints=updated_endpoints)
+    return {"ok": True}
+
+
+def _build_endpoint_request(
+    integration: Integration,
+    ep: IntegrationEndpoint,
+    limit: int = 1,
+    path_vars: dict[str, str] | None = None,
+):
+    """Build URL, headers, params, auth for an endpoint request. Returns (url, headers, params, auth) or raises."""
+    cfg = integration.config
+    itype = integration.integration_type
+    base_url = cfg.get("instance_url", "").rstrip("/")
+
+    if itype == "github":
+        base_url = "https://api.github.com"
+    if not base_url:
+        return None
+
+    url = f"{base_url}{ep.path}"
+    headers = {**ep.headers}
+    params = {**ep.query_params}
+    auth = None
+
+    if itype == "servicenow":
+        auth = (cfg.get("username", ""), cfg.get("password", ""))
+        # Only add sysparm_limit for standard table/CMDB APIs, not scripted REST APIs
+        if ep.path.startswith("/api/now/"):
+            params["sysparm_limit"] = str(limit)
+    elif itype == "jira":
+        auth = (cfg.get("username", ""), cfg.get("api_token", ""))
+        headers.setdefault("Accept", "application/json")
+        params["maxResults"] = str(limit)
+    elif itype == "salesforce":
+        auth = (cfg.get("username", ""), cfg.get("password", ""))
+    elif itype == "github":
+        headers["Authorization"] = f"Bearer {cfg.get('token', '')}"
+        headers.setdefault("Accept", "application/vnd.github+json")
+        url = url.replace("{org}", cfg.get("org", "")).replace("{repo}", cfg.get("repo", "")).replace("{path}", "")
+        params["per_page"] = str(limit)
+
+    # Substitute user-supplied path variables (e.g. {sys_id}, {title})
+    if path_vars:
+        import re
+        from urllib.parse import quote
+        for key, value in path_vars.items():
+            url = url.replace(f"{{{key}}}", quote(str(value), safe=""))
+        # Remove any remaining un-substituted {var} placeholders
+        url = re.sub(r"\{[^}]+\}", "", url)
+
+    return url, headers, params, auth
+
+
+@router.post("/{integration_id}/endpoints/{endpoint_id}/test")
+async def test_endpoint(
+    tenant_id: str, integration_id: str, endpoint_id: str,
+    body: dict | None = None, request: Request = None,
+):
+    """Test an endpoint. Optional body: {path_vars: {key: value}, limit: int}"""
+    if body is None:
+        body = {}
+    integration = await _get_integration(tenant_id, integration_id, request)
+    ep = next((e for e in integration.endpoints if e.id == endpoint_id), None)
+    if ep is None:
+        raise HTTPException(status_code=404, detail="Endpoint not found")
+
+    limit = min(max(int(body.get("limit", 1)), 1), 25)
+    path_vars = body.get("path_vars") or {}
+
+    result = _build_endpoint_request(integration, ep, limit=limit, path_vars=path_vars)
+    if result is None:
+        return {"ok": False, "detail": "No base URL configured — save credentials first"}
+    url, headers, params, auth = result
+
+    try:
+        import time
+        t0 = time.monotonic()
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.request(ep.method, url, headers=headers, params=params, auth=auth)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        resolved_url = str(resp.request.url)
+
+        # Truncate response body for preview
+        response_body = resp.text[:4000] if resp.text else None
+
+        if resp.is_success:
+            return {"ok": True, "status_code": resp.status_code, "latency_ms": latency_ms,
+                    "resolved_url": resolved_url, "response_body": response_body,
+                    "detail": f"{ep.method} {ep.path} returned {resp.status_code} in {latency_ms}ms"}
+        return {"ok": False, "status_code": resp.status_code, "latency_ms": latency_ms,
+                "resolved_url": resolved_url, "response_body": response_body,
+                "detail": f"HTTP {resp.status_code}: {resp.text[:200]}"}
+    except Exception as e:
+        return {"ok": False, "resolved_url": url, "detail": str(e)}
+
+
+@router.post("/{integration_id}/endpoints/{endpoint_id}/fetch")
+async def fetch_endpoint_records(
+    tenant_id: str, integration_id: str, endpoint_id: str,
+    body: dict, request: Request,
+):
+    """Fetch sample records from an endpoint. body: {limit: int (1-25, default 5)}"""
+    integration = await _get_integration(tenant_id, integration_id, request)
+    ep = next((e for e in integration.endpoints if e.id == endpoint_id), None)
+    if ep is None:
+        raise HTTPException(status_code=404, detail="Endpoint not found")
+
+    limit = min(max(int(body.get("limit", 5)), 1), 25)
+    path_vars = body.get("path_vars") or {}
+
+    result = _build_endpoint_request(integration, ep, limit=limit, path_vars=path_vars)
+    if result is None:
+        return {"ok": False, "detail": "No base URL configured — save credentials first"}
+    url, headers, params, auth = result
+
+    try:
+        import time
+        t0 = time.monotonic()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.request(ep.method, url, headers=headers, params=params, auth=auth)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+
+        if not resp.is_success:
+            return {"ok": False, "status_code": resp.status_code, "latency_ms": latency_ms,
+                    "detail": f"HTTP {resp.status_code}: {resp.text[:500]}"}
+
+        # Parse response and extract records
+        try:
+            data = resp.json()
+        except Exception:
+            return {"ok": True, "status_code": resp.status_code, "latency_ms": latency_ms,
+                    "records": [], "raw_text": resp.text[:2000], "detail": "Response is not JSON"}
+
+        # Extract records from common response shapes
+        records = []
+        record_count = None
+        if isinstance(data, list):
+            records = data[:limit]
+            record_count = len(data)
+        elif isinstance(data, dict):
+            # ServiceNow: {result: [...]}
+            if "result" in data and isinstance(data["result"], list):
+                records = data["result"][:limit]
+                record_count = len(data["result"])
+            # Jira: {issues: [...], total: N}
+            elif "issues" in data and isinstance(data["issues"], list):
+                records = data["issues"][:limit]
+                record_count = data.get("total", len(data["issues"]))
+            # Salesforce: {records: [...], totalSize: N}
+            elif "records" in data and isinstance(data["records"], list):
+                records = data["records"][:limit]
+                record_count = data.get("totalSize", len(data["records"]))
+            # GitHub: array responses are already handled above; single object
+            elif "items" in data and isinstance(data["items"], list):
+                records = data["items"][:limit]
+                record_count = data.get("total_count", len(data["items"]))
+            else:
+                # Single object or unknown shape — return as-is
+                records = [data]
+                record_count = 1
+
+        return {
+            "ok": True,
+            "status_code": resp.status_code,
+            "latency_ms": latency_ms,
+            "record_count": record_count,
+            "records": records,
+            "detail": f"Fetched {len(records)} record(s) in {latency_ms}ms",
+        }
+    except Exception as e:
+        return {"ok": False, "resolved_url": url, "detail": str(e)}

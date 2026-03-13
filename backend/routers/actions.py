@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from models import Action, CreateActionRequest, ExecuteActionRequest, UpdateActionRequest
 from services.action_recommendation import recommend_actions
@@ -26,8 +27,10 @@ async def _require_tenant(tenant_id: str, request: Request):
 
 
 @router.get("")
-async def list_actions(tenant_id: str, request: Request):
+async def list_actions(tenant_id: str, request: Request, filter_tenant: Optional[str] = Query(None)):
     await _require_tenant(tenant_id, request)
+    if filter_tenant is not None:
+        return await request.app.state.action_store.list_filtered(filter_tenant)
     return await request.app.state.action_store.list_for_tenant(tenant_id)
 
 

@@ -2,6 +2,7 @@ import { Outlet, Link, useLocation } from 'react-router';
 import {
   Building2,
   Plug,
+  Wrench,
   Sparkles,
   Zap,
   Workflow,
@@ -26,6 +27,7 @@ type NavItem = {
 const navigation: NavItem[] = [
   { name: 'Tenants', href: '/tenants', icon: Building2 },
   { name: 'Integrations', href: '/integrations', icon: Plug },
+  { name: 'Tools', href: '/tools', icon: Wrench },
   { name: 'Skills', href: '/skills', icon: Sparkles },
   { name: 'Use Cases', href: '/use-cases', icon: Workflow },
   { name: 'Actions', href: '/actions', icon: Zap },

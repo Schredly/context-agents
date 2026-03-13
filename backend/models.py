@@ -398,37 +398,152 @@ class ObservabilityTrendsResponse(BaseModel):
 
 
 INTEGRATION_CATALOG = {
-    "servicenow": {"name": "ServiceNow", "description": "IT service management platform", "config_fields": ["instance_url", "username", "password"]},
-    "google-drive": {"name": "Google Drive", "description": "Cloud storage and file sharing", "config_fields": ["client_id", "root_folder_id"]},
-    "salesforce": {"name": "Salesforce", "description": "Customer relationship management", "config_fields": ["instance_url", "username", "password"]},
-    "slack": {"name": "Slack", "description": "Team communication platform", "config_fields": ["webhook_url"]},
-    "github": {"name": "GitHub", "description": "Code repository and collaboration", "config_fields": ["token", "org", "repo"]},
-    "jira": {"name": "Jira", "description": "Project tracking and management", "config_fields": ["instance_url", "username", "api_token"]},
-    "replit": {"name": "Replit", "description": "Application builder and deployment platform", "config_fields": ["connect_sid", "username"]},
+    "servicenow": {
+        "name": "ServiceNow",
+        "description": "IT service management platform",
+        "config_fields": ["instance_url", "username", "password"],
+        "default_endpoints": [
+            {"name": "Search Incidents", "path": "/api/now/table/incident", "method": "GET", "description": "Query the incident table"},
+            {"name": "Create Incident", "path": "/api/now/table/incident", "method": "POST", "description": "Create a new incident"},
+            {"name": "Knowledge Base", "path": "/api/now/table/kb_knowledge", "method": "GET", "description": "Search knowledge articles"},
+            {"name": "List Catalogs", "path": "/api/1939459/catalogtitleservice", "method": "GET", "description": "List all available ServiceNow catalogs"},
+            {"name": "Catalog by Title", "path": "/api/1939459/catalogbytitleservic/catalog/{catalogTitle}", "method": "GET", "description": "Fetch a catalog by its title"},
+            {"name": "Catalog by URL", "path": "/api/1939459/catalogunderstandingservice/loveboat/{sys_id}", "method": "GET", "description": "Fetch a specific catalog by sys_id"},
+        ],
+    },
+    "google-drive": {
+        "name": "Google Drive",
+        "description": "Cloud storage and file sharing",
+        "config_fields": ["client_id", "root_folder_id"],
+        "default_endpoints": [],
+    },
+    "salesforce": {
+        "name": "Salesforce",
+        "description": "Customer relationship management",
+        "config_fields": ["instance_url", "username", "password"],
+        "default_endpoints": [
+            {"name": "Query Records (SOQL)", "path": "/services/data/v59.0/query", "method": "GET", "description": "Execute a SOQL query"},
+            {"name": "Create Record", "path": "/services/data/v59.0/sobjects", "method": "POST", "description": "Create a new SObject record"},
+            {"name": "Describe SObject", "path": "/services/data/v59.0/sobjects/{sobject}/describe", "method": "GET", "description": "Get metadata for an SObject"},
+        ],
+    },
+    "slack": {
+        "name": "Slack",
+        "description": "Team communication platform",
+        "config_fields": ["webhook_url"],
+        "default_endpoints": [],
+    },
+    "github": {
+        "name": "GitHub",
+        "description": "Code repository and collaboration",
+        "config_fields": ["token", "org", "repo"],
+        "default_endpoints": [
+            {"name": "List Repos", "path": "/orgs/{org}/repos", "method": "GET", "description": "List repositories in the organization"},
+            {"name": "Create Repo", "path": "/orgs/{org}/repos", "method": "POST", "description": "Create a new repository"},
+            {"name": "Repo Contents", "path": "/repos/{org}/{repo}/contents/{path}", "method": "GET", "description": "Get file or directory contents"},
+        ],
+    },
+    "jira": {
+        "name": "Jira",
+        "description": "Project tracking and management",
+        "config_fields": ["instance_url", "username", "api_token"],
+        "default_endpoints": [
+            {"name": "Search Issues (JQL)", "path": "/rest/api/3/search", "method": "GET", "description": "Search issues using JQL"},
+            {"name": "Create Issue", "path": "/rest/api/3/issue", "method": "POST", "description": "Create a new issue"},
+            {"name": "Get Issue", "path": "/rest/api/3/issue/{issueIdOrKey}", "method": "GET", "description": "Get a single issue by key"},
+        ],
+    },
+    "replit": {
+        "name": "Replit",
+        "description": "Application builder and deployment platform",
+        "config_fields": ["connect_sid", "username"],
+        "default_endpoints": [],
+    },
 }
+
+
+class IntegrationEndpoint(BaseModel):
+    id: str
+    name: str
+    path: str
+    method: str = "GET"
+    headers: dict[str, str] = Field(default_factory=dict)
+    query_params: dict[str, str] = Field(default_factory=dict)
+    description: str = ""
 
 
 class Integration(BaseModel):
     id: str
     tenant_id: str
     integration_type: str
+    name: str = ""
     enabled: bool = False
     config: dict[str, Any] = Field(default_factory=dict)
+    endpoints: list[IntegrationEndpoint] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class CreateIntegrationRequest(BaseModel):
     integration_type: str
+    name: str = ""
 
 
 class UpdateIntegrationConfigRequest(BaseModel):
     config: dict[str, Any]
 
 
+class AddEndpointRequest(BaseModel):
+    name: str
+    path: str
+    method: str = "GET"
+    headers: dict[str, str] = Field(default_factory=dict)
+    query_params: dict[str, str] = Field(default_factory=dict)
+    description: str = ""
+
+
+class UpdateEndpointRequest(BaseModel):
+    name: Optional[str] = None
+    path: Optional[str] = None
+    method: Optional[str] = None
+    headers: Optional[dict[str, str]] = None
+    query_params: Optional[dict[str, str]] = None
+    description: Optional[str] = None
+
+
 class TestIntegrationRequest(BaseModel):
     integration_type: str
     config: dict[str, Any]
+
+
+# --- Managed Integrations (v2) ---
+
+
+class ManagedIntegration(BaseModel):
+    id: str
+    name: str
+    type: str                        # "web_service" | "github"
+    tenant_id: str
+    base_url: str = ""
+    endpoint: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
+    auth_type: str = ""              # "bearer" | "basic" | "api_key" | ""
+    token: str = ""
+    test_endpoint: str = ""
+    enabled: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CreateManagedIntegrationRequest(BaseModel):
+    name: str
+    type: str                        # "web_service" | "github"
+    base_url: str = ""
+    endpoint: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
+    auth_type: str = ""
+    token: str = ""
+    test_endpoint: str = ""
 
 
 # --- Tool Catalog ---

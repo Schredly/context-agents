@@ -3,11 +3,13 @@ import { Plus, Pencil, Trash2, MoreVertical, Loader2, AlertCircle } from "lucide
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { useTenants } from "../context/TenantContext";
+import { TenantFilter, type TenantFilterValue } from "../components/TenantFilter";
 import * as api from "../services/api";
 import { format } from "date-fns";
 
 export default function SkillsPage() {
   const { currentTenantId } = useTenants();
+  const [filterTenant, setFilterTenant] = useState<TenantFilterValue>("all");
   const [skills, setSkills] = useState<api.SkillResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -19,14 +21,14 @@ export default function SkillsPage() {
     }
     setLoading(true);
     try {
-      const data = await api.getSkills(currentTenantId);
+      const data = await api.getSkills(currentTenantId, filterTenant);
       setSkills(data);
     } catch {
       toast.error("Failed to load skills");
     } finally {
       setLoading(false);
     }
-  }, [currentTenantId]);
+  }, [currentTenantId, filterTenant]);
 
   useEffect(() => {
     fetchSkills();
@@ -54,6 +56,9 @@ export default function SkillsPage() {
               Skills
             </h1>
             <p className="text-sm text-gray-600">Reusable AI capabilities.</p>
+            <div className="mt-2">
+              <TenantFilter value={filterTenant} onChange={setFilterTenant} />
+            </div>
           </div>
           <Link
             to="/skills/create"

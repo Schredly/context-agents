@@ -337,10 +337,25 @@ async def convert_catalog_to_replit(tenant_id: str, payload: dict, app) -> dict:
     cfg = await servicenow_tools._get_snow_config(tenant_id, app)
     print(f"[snow_to_replit] ServiceNow config loaded for tenant {tenant_id}")
 
-    # 2. Fetch catalog data from the static service_url parameter
-    service_url = payload.get("service_url", "")
-    if not service_url:
+    # 2. Resolve service_url — supports "endpoint:Name|key=val" syntax or a plain URL
+    raw_url = payload.get("service_url", "")
+    if not raw_url:
         return {"status": "error", "error": "Missing service_url parameter"}
+
+    if raw_url.startswith("endpoint:"):
+        # Parse "endpoint:Catalog by URL|sys_id=abc123"
+        parts = raw_url[len("endpoint:"):].split("|", 1)
+        ep_name = parts[0].strip()
+        path_vars = {}
+        if len(parts) > 1:
+            for pair in parts[1].split(","):
+                k, _, v = pair.partition("=")
+                path_vars[k.strip()] = v.strip()
+        service_url = await servicenow_tools.get_endpoint_url(tenant_id, ep_name, app, **path_vars)
+        if not service_url:
+            return {"status": "error", "error": f"Endpoint '{ep_name}' not found on ServiceNow integration"}
+    else:
+        service_url = raw_url
 
     t0 = time.monotonic()
     try:
@@ -511,9 +526,14 @@ async def convert_catalog_by_title_to_replit(tenant_id: str, payload: dict, app)
     cfg = await servicenow_tools._get_snow_config(tenant_id, app)
     print(f"[snow_to_replit] ServiceNow config loaded for tenant {tenant_id}")
 
-    # 2. Build URL: replace spaces with %20
+    # 2. Build URL from integration endpoint (fallback to config instance_url)
     encoded_title = catalog_title.replace(" ", "%20")
-    service_url = f"https://dev221705.service-now.com/api/1939459/catalogbytitleservice/catalog/{encoded_title}"
+    service_url = await servicenow_tools.get_endpoint_url(
+        tenant_id, "Catalog by Title", app, catalogTitle=encoded_title
+    )
+    if not service_url:
+        # Fallback: build from instance_url in config
+        service_url = f"{cfg['instance_url']}/api/1939459/catalogbytitleservic/catalog/{encoded_title}"
 
     t0 = time.monotonic()
     try:

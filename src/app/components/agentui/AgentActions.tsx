@@ -37,6 +37,9 @@ interface DraftReadyPayload {
   draft_prompt: string;
   catalog_data: string;
   action_id: string;
+  approve_label?: string;
+  draft_label?: string;
+  target?: string;
 }
 
 interface NeedsInputPayload {
@@ -376,6 +379,9 @@ export function AgentActions({
           draft_prompt: prompt,
           catalog_data: data.catalog_data || "",
           action_id: action.id,
+          approve_label: data.approve_label || undefined,
+          draft_label: data.draft_label || undefined,
+          target: data.target || undefined,
         });
         setRefiningIds((prev) => new Set(prev).add(action.id));
         setExecutingId(null);

@@ -1,6 +1,7 @@
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from models import (
     CreateSkillRequest,
@@ -29,8 +30,10 @@ def _validate_tools(tool_ids: list[str]) -> None:
 
 
 @router.get("/")
-async def list_skills(tenant_id: str, request: Request):
+async def list_skills(tenant_id: str, request: Request, filter_tenant: Optional[str] = Query(None)):
     await _require_tenant(tenant_id, request)
+    if filter_tenant is not None:
+        return await request.app.state.skill_store.list_filtered(filter_tenant)
     return await request.app.state.skill_store.list_for_tenant(tenant_id)
 
 

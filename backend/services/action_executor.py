@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from models import Action, AgentUIRun
-from services import servicenow_tools, google_drive_tools, jira_tools, slack_tools, pdf_tools, replit_tools, snow_to_replit
+from services import servicenow_tools, google_drive_tools, jira_tools, slack_tools, pdf_tools, replit_tools, snow_to_replit, snow_to_github
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,7 @@ _OPERATION_HANDLERS: dict[str, callable] = {
     "replit:application.build": replit_tools.build_application_action,
     "servicenow:catalog_to_replit": snow_to_replit.convert_catalog_to_replit,
     "servicenow:catalog_by_title_to_replit": snow_to_replit.convert_catalog_by_title_to_replit,
+    "servicenow:catalog_to_github": snow_to_github.convert_catalog_to_github,
 }
 
 

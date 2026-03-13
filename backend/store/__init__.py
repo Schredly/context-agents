@@ -11,6 +11,7 @@ from store.interface import (
     GoogleDriveConfigStore,
     IntegrationStore,
     LLMConfigStore,
+    ManagedIntegrationStore,
     LLMUsageStore,
     MetricsEventStore,
     ReplitConfigStore,
@@ -36,6 +37,7 @@ from store.memory import (
     InMemoryGoogleDriveConfigStore,
     InMemoryIntegrationStore,
     InMemoryLLMConfigStore,
+    InMemoryManagedIntegrationStore,
     InMemoryLLMUsageStore,
     InMemoryMetricsEventStore,
     InMemoryReplitConfigStore,
@@ -96,4 +98,6 @@ __all__ = [
     "InMemoryGenomeStore",
     "InMemoryGenomeArtifactStore",
     "InMemoryExtractionPayloadStore",
+    "ManagedIntegrationStore",
+    "InMemoryManagedIntegrationStore",
 ]

@@ -26,6 +26,27 @@ async def _get_snow_config(tenant_id: str, app) -> dict:
     }
 
 
+async def get_endpoint_url(tenant_id: str, endpoint_name: str, app, **path_vars) -> str | None:
+    """Look up a named endpoint from the tenant's ServiceNow integration and return the full URL.
+
+    Returns None if the endpoint is not found. Path variables like {title} are
+    substituted from **path_vars.
+    """
+    integration = await app.state.integration_store.get_by_type(tenant_id, "servicenow")
+    if integration is None:
+        return None
+    instance_url = integration.config.get("instance_url", "").rstrip("/")
+    if not instance_url:
+        return None
+    for ep in integration.endpoints:
+        if ep.name == endpoint_name:
+            path = ep.path
+            for key, value in path_vars.items():
+                path = path.replace(f"{{{key}}}", str(value))
+            return f"{instance_url}{path}"
+    return None
+
+
 async def search_incidents(tenant_id: str, payload: dict, app) -> dict:
     """Search ServiceNow incidents.
 

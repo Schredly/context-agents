@@ -10,6 +10,7 @@ interface InputPanelProps {
   disabled?: boolean;
   mode?: "normal" | "refine" | "input";
   inputPrompt?: string;
+  approveLabel?: string;
 }
 
 export function InputPanel({
@@ -21,6 +22,7 @@ export function InputPanel({
   disabled = false,
   mode = "normal",
   inputPrompt,
+  approveLabel,
 }: InputPanelProps) {
   const [message, setMessage] = useState("");
   const [isFocused, setIsFocused] = useState(false);
@@ -136,7 +138,7 @@ export function InputPanel({
                 className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Approve & Send to Replit</span>
+                <span>{approveLabel || "Approve & Send to Replit"}</span>
               </button>
             )}
             <button

@@ -10,6 +10,7 @@ from models import (
     GenomeArtifact,
     GenomeDocument,
     Integration,
+    IntegrationEndpoint,
     LLMConfig,
     Skill,
     Tenant,
@@ -71,6 +72,23 @@ async def seed_demo_data(app) -> None:
             "username": "admin",
             "password": "1Surfer1!",
         },
+        endpoints=[
+            IntegrationEndpoint(id="ep_catbyurl", name="Catalog by URL",
+                path="/api/1939459/catalogunderstandingservice/loveboat/{sys_id}",
+                method="GET", description="Fetch a specific catalog by direct URL with sys_id"),
+            IntegrationEndpoint(id="ep_catbytitle", name="Catalog by Title",
+                path="/api/1939459/catalogbytitleservic/catalog/{catalogTitle}",
+                method="GET", description="Fetch a catalog by its title (URL-encoded)"),
+            IntegrationEndpoint(id="ep_catlist", name="List Catalogs",
+                path="/api/1939459/catalogtitleservice",
+                method="GET", description="List all available ServiceNow catalogs"),
+            IntegrationEndpoint(id="ep_incidents", name="Search Incidents",
+                path="/api/now/table/incident", method="GET",
+                description="Query the incident table"),
+            IntegrationEndpoint(id="ep_kb", name="Knowledge Base",
+                path="/api/now/table/kb_knowledge", method="GET",
+                description="Search knowledge articles"),
+        ],
     )
     await app.state.integration_store.create(snow_integration)
 
@@ -279,7 +297,7 @@ async def seed_demo_data(app) -> None:
             "operation": "catalog_to_replit",
             "parameters": [
                 ActionParameter(name="service_url", source="static",
-                    value="https://dev221705.service-now.com/api/1939459/catalogunderstandingservice/loveboat/2ab7077237153000158bbfc8bcbe5da9"),
+                    value="endpoint:Catalog by URL|sys_id=2ab7077237153000158bbfc8bcbe5da9"),
             ],
             "rules": [
                 ActionRule(type="keyword", operator="contains",
@@ -297,6 +315,19 @@ async def seed_demo_data(app) -> None:
             "rules": [
                 ActionRule(type="keyword", operator="contains",
                     value="convert,servicenow,catalog,replit"),
+            ],
+        },
+        {
+            "name": "ServiceNow Catalog to GitHub",
+            "description": "Export a ServiceNow catalog to a GitHub repository",
+            "integration_id": "servicenow",
+            "operation": "catalog_to_github",
+            "parameters": [
+                ActionParameter(name="catalog_selection", source="user_input"),
+            ],
+            "rules": [
+                ActionRule(type="keyword", operator="contains",
+                    value="github,catalog,export,servicenow,repository"),
             ],
         },
     ]

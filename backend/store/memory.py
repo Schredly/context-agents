@@ -19,6 +19,7 @@ from models import (
     GoogleDriveConfig,
     Integration,
     LLMConfig,
+    ManagedIntegration,
     LLMUsageEvent,
     MetricsEvent,
     RunTelemetry,
@@ -43,6 +44,7 @@ from store.interface import (
     GoogleDriveConfigStore,
     IntegrationStore,
     LLMConfigStore,
+    ManagedIntegrationStore,
     LLMUsageStore,
     MetricsEventStore,
     ReplitConfigStore,
@@ -339,6 +341,13 @@ class InMemoryIntegrationStore(IntegrationStore):
     async def list_for_tenant(self, tenant_id: str) -> list[Integration]:
         return [i for i in self._integrations.values() if i.tenant_id == tenant_id]
 
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[Integration]:
+        if tenant_id is None or tenant_id == "all":
+            return list(self._integrations.values())
+        if tenant_id == "GLOBAL":
+            return [i for i in self._integrations.values() if i.tenant_id == "GLOBAL"]
+        return [i for i in self._integrations.values() if i.tenant_id in (tenant_id, "GLOBAL")]
+
     async def update(self, integration_id: str, **kwargs: Any) -> Optional[Integration]:
         existing = self._integrations.get(integration_id)
         if existing is None:
@@ -374,6 +383,13 @@ class InMemorySkillStore(SkillStore):
     async def list_for_tenant(self, tenant_id: str) -> list[Skill]:
         return [s for s in self._skills.values() if s.tenant_id == tenant_id]
 
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[Skill]:
+        if tenant_id is None or tenant_id == "all":
+            return list(self._skills.values())
+        if tenant_id == "GLOBAL":
+            return [s for s in self._skills.values() if s.tenant_id == "GLOBAL"]
+        return [s for s in self._skills.values() if s.tenant_id in (tenant_id, "GLOBAL")]
+
     async def update(self, skill_id: str, **kwargs: Any) -> Optional[Skill]:
         existing = self._skills.get(skill_id)
         if existing is None:
@@ -403,6 +419,13 @@ class InMemoryUseCaseStore(UseCaseStore):
     async def list_for_tenant(self, tenant_id: str) -> list[UseCase]:
         return [uc for uc in self._use_cases.values() if uc.tenant_id == tenant_id]
 
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[UseCase]:
+        if tenant_id is None or tenant_id == "all":
+            return list(self._use_cases.values())
+        if tenant_id == "GLOBAL":
+            return [uc for uc in self._use_cases.values() if uc.tenant_id == "GLOBAL"]
+        return [uc for uc in self._use_cases.values() if uc.tenant_id in (tenant_id, "GLOBAL")]
+
     async def update(self, use_case_id: str, **kwargs: Any) -> Optional[UseCase]:
         existing = self._use_cases.get(use_case_id)
         if existing is None:
@@ -431,6 +454,13 @@ class InMemoryUseCaseRunStore(UseCaseRunStore):
 
     async def list_for_tenant(self, tenant_id: str) -> list[UseCaseRun]:
         return [r for r in self._runs.values() if r.tenant_id == tenant_id]
+
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[UseCaseRun]:
+        if tenant_id is None or tenant_id == "all":
+            return list(self._runs.values())
+        if tenant_id == "GLOBAL":
+            return [r for r in self._runs.values() if r.tenant_id == "GLOBAL"]
+        return [r for r in self._runs.values() if r.tenant_id in (tenant_id, "GLOBAL")]
 
     async def list_for_use_case(self, use_case_id: str) -> list[UseCaseRun]:
         return [r for r in self._runs.values() if r.use_case_id == use_case_id]
@@ -501,6 +531,15 @@ class InMemoryLLMUsageStore(LLMUsageStore):
             reverse=True,
         )
 
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[LLMUsageEvent]:
+        if tenant_id is None or tenant_id == "all":
+            items = list(self._events.values())
+        elif tenant_id == "GLOBAL":
+            items = [e for e in self._events.values() if e.tenant_id == "GLOBAL"]
+        else:
+            items = [e for e in self._events.values() if e.tenant_id in (tenant_id, "GLOBAL")]
+        return sorted(items, key=lambda e: e.timestamp, reverse=True)
+
     async def list_for_run(self, run_id: str) -> list[LLMUsageEvent]:
         return sorted(
             [e for e in self._events.values() if e.run_id == run_id],
@@ -528,6 +567,13 @@ class InMemoryActionStore(ActionStore):
 
     async def list_for_tenant(self, tenant_id: str) -> list[Action]:
         return [a for a in self._actions.values() if a.tenant_id == tenant_id]
+
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[Action]:
+        if tenant_id is None or tenant_id == "all":
+            return list(self._actions.values())
+        if tenant_id == "GLOBAL":
+            return [a for a in self._actions.values() if a.tenant_id == "GLOBAL"]
+        return [a for a in self._actions.values() if a.tenant_id in (tenant_id, "GLOBAL")]
 
     async def update(self, action_id: str, **kwargs: Any) -> Optional[Action]:
         existing = self._actions.get(action_id)
@@ -625,3 +671,36 @@ class InMemoryExtractionPayloadStore(ExtractionPayloadStore):
             if e.payload_hash == payload_hash and e.status in ("completed", "processing"):
                 return e
         return None
+
+
+class InMemoryManagedIntegrationStore(ManagedIntegrationStore):
+    def __init__(self) -> None:
+        self._integrations: dict[str, ManagedIntegration] = {}
+
+    async def create(self, integration: ManagedIntegration) -> ManagedIntegration:
+        self._integrations[integration.id] = integration
+        return integration
+
+    async def get(self, integration_id: str) -> Optional[ManagedIntegration]:
+        return self._integrations.get(integration_id)
+
+    async def list_for_tenant(self, tenant_id: str) -> list[ManagedIntegration]:
+        return sorted(
+            [i for i in self._integrations.values() if i.tenant_id == tenant_id],
+            key=lambda i: i.created_at,
+            reverse=True,
+        )
+
+    async def update(self, integration_id: str, **kwargs: Any) -> Optional[ManagedIntegration]:
+        existing = self._integrations.get(integration_id)
+        if existing is None:
+            return None
+        data = existing.model_dump()
+        data.update({k: v for k, v in kwargs.items() if v is not None})
+        data["updated_at"] = datetime.now(timezone.utc)
+        updated = ManagedIntegration(**data)
+        self._integrations[integration_id] = updated
+        return updated
+
+    async def delete(self, integration_id: str) -> bool:
+        return self._integrations.pop(integration_id, None) is not None

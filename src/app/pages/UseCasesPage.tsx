@@ -3,10 +3,12 @@ import { Plus, Pencil, Trash2, MoreVertical, Loader2, AlertCircle } from "lucide
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { useTenants } from "../context/TenantContext";
+import { TenantFilter, type TenantFilterValue } from "../components/TenantFilter";
 import * as api from "../services/api";
 
 export default function UseCasesPage() {
   const { currentTenantId } = useTenants();
+  const [filterTenant, setFilterTenant] = useState<TenantFilterValue>("all");
   const [useCases, setUseCases] = useState<api.UseCaseResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -18,14 +20,14 @@ export default function UseCasesPage() {
     }
     setLoading(true);
     try {
-      const data = await api.getUseCases(currentTenantId);
+      const data = await api.getUseCases(currentTenantId, filterTenant);
       setUseCases(data);
     } catch {
       toast.error("Failed to load use cases");
     } finally {
       setLoading(false);
     }
-  }, [currentTenantId]);
+  }, [currentTenantId, filterTenant]);
 
   useEffect(() => {
     fetchUseCases();
@@ -57,6 +59,9 @@ export default function UseCasesPage() {
             <p className="text-sm text-gray-600">
               Workflow templates built from skills.
             </p>
+            <div className="mt-2">
+              <TenantFilter value={filterTenant} onChange={setFilterTenant} />
+            </div>
           </div>
           <Link
             to="/use-cases/create"

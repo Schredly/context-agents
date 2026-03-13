@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { getTenants, type TenantResponse } from '../services/api';
 
+export const ALL_TENANTS = '__all__';
+
 interface TenantContextValue {
   tenants: TenantResponse[];
   loading: boolean;
@@ -9,6 +11,10 @@ interface TenantContextValue {
   currentTenantId: string | null;
   setCurrentTenantId: (id: string | null) => void;
   currentTenant: TenantResponse | null;
+  /** True when "All Tenants" is selected */
+  isAllTenants: boolean;
+  /** A real tenant ID for API URL paths — first tenant when "All" is selected */
+  apiTenantId: string | null;
 }
 
 const TenantContext = createContext<TenantContextValue | null>(null);
@@ -19,7 +25,9 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(null);
 
-  const currentTenant = tenants.find((t) => t.id === currentTenantId) ?? null;
+  const isAllTenants = currentTenantId === ALL_TENANTS;
+  const currentTenant = isAllTenants ? null : (tenants.find((t) => t.id === currentTenantId) ?? null);
+  const apiTenantId = isAllTenants ? (tenants[0]?.id ?? null) : currentTenantId;
 
   const refreshTenants = useCallback(async () => {
     setError(null);
@@ -28,6 +36,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setTenants(data);
       // If current selection is no longer valid, reset to first tenant
       setCurrentTenantId((prev) => {
+        if (prev === ALL_TENANTS) return prev;
         if (prev && data.some((t) => t.id === prev)) return prev;
         return data[0]?.id ?? null;
       });
@@ -60,6 +69,8 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         currentTenantId,
         setCurrentTenantId,
         currentTenant,
+        isAllTenants,
+        apiTenantId,
       }}
     >
       {children}
@@ -75,6 +86,8 @@ const FALLBACK: TenantContextValue = {
   currentTenantId: null,
   setCurrentTenantId: () => {},
   currentTenant: null,
+  isAllTenants: false,
+  apiTenantId: null,
 };
 
 export function useTenants(): TenantContextValue {

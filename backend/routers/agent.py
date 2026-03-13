@@ -454,6 +454,39 @@ async def approve_replit_endpoint(tenant_id: str, body: ApproveReplitRequest, re
     return result
 
 
+class ApproveGithubRequest(BaseModel):
+    approved_prompt: str
+    catalog_data: str = ""
+
+
+@router.post("/approve-github")
+async def approve_github_endpoint(tenant_id: str, body: ApproveGithubRequest, request: Request):
+    await _require_tenant(tenant_id, request)
+    return {
+        "status": "ok",
+        "message": "Catalog export approved — prompt and payload ready for GitHub.",
+    }
+
+
+class CommitGithubRequest(BaseModel):
+    prompt: str
+    payload: str
+
+
+@router.post("/commit-github")
+async def commit_github_endpoint(tenant_id: str, body: CommitGithubRequest, request: Request):
+    """Receive the user-edited prompt + static payload and forward to the generation pipeline."""
+    await _require_tenant(tenant_id, request)
+    from services.snow_to_github import commit_to_github
+    result = await commit_to_github(
+        tenant_id=tenant_id,
+        prompt=body.prompt,
+        payload=body.payload,
+        app=request.app,
+    )
+    return result
+
+
 # --- Observability traces from AgentUI runs ---
 
 @router.get("/traces")

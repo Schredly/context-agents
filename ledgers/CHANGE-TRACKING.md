@@ -2662,3 +2662,324 @@ Three UX improvements: progress indicators during long operations, rebranding fr
 - `handleApproveReplit` — Clipboard write now happens **immediately** on Approve click (before the async backend call), using `currentDraft.draftPrompt` from local state
 - `setDraftState` during refinement — Ref sync (`draftStateRef.current = updated`) now happens synchronously inside the state updater callback, not deferred to `useEffect`
 - Removed dependency on `data.prompt_text` from backend echo for clipboard — local state is the source of truth
+
+## #049 — 2026-03-13 — GitHub Org Repo Creation + Structured Commit
+
+**What happened:**
+Rewrote `commit_to_github()` in `backend/services/snow_to_github.py` to create repos under a GitHub org and commit a structured directory tree instead of flat files.
+
+**Changes:**
+- `backend/services/snow_to_github.py` — New `_build_repo_files()` helper parses the ServiceNow catalog JSON payload and generates structured files:
+  - `catalog/catalog.json` — full catalog payload
+  - `catalog/items.json` — extracted items list
+  - `forms/<item_name>.json` — one file per catalog item with variable definitions
+  - `workflows/workflows.json` — workflow/execution plan data per item
+  - `models/data_model.json` — extracted field names, types, mandatory flags
+  - `README.md` — overview with item list, repo structure, prompt text
+- `commit_to_github()` — Rewritten:
+  - Creates repo via `POST /orgs/{org}/repos` (org sourced from `ManagedIntegration.base_url`)
+  - Commits each file via `PUT /repos/{org}/{repo}/contents/{path}` using a single `httpx.AsyncClient` session
+  - Captures `commit.sha` from GitHub Contents API response
+  - Returns `{ repo_url, commit_hash, files_pushed }` on success
+  - No longer calls `GET /user` — org is explicit from integration config
+
+## #050 — 2026-03-13 — Tenant Filtering Across Platform Modules
+
+**What happened:**
+Added cross-tenant filtering with GLOBAL support to 6 platform modules: Integrations, Skills, Use Cases, Actions, Runs, and LLM Usage Ledger. Each module now has a tenant filter dropdown with options for All, Global, and individual tenants.
+
+**Backend — Store layer:**
+- `backend/store/interface.py` — Added `list_filtered(tenant_id: Optional[str])` abstract method to 6 store ABCs: `IntegrationStore`, `SkillStore`, `UseCaseStore`, `ActionStore`, `UseCaseRunStore`, `LLMUsageStore`
+- `backend/store/memory.py` — Implemented `list_filtered` in all 6 InMemory stores with query logic:
+  - `None` or `"all"` → return all items
+  - `"GLOBAL"` → return only items where `tenant_id == "GLOBAL"`
+  - Specific tenant → return items where `tenant_id` matches OR `tenant_id == "GLOBAL"`
+
+**Backend — Router layer:**
+- Added optional `filter_tenant` query parameter to list endpoints in:
+  - `backend/routers/integrations.py` — `GET /api/admin/{tenant_id}/integrations/`
+  - `backend/routers/skills.py` — `GET /api/admin/{tenant_id}/skills/`
+  - `backend/routers/use_cases.py` — `GET /api/admin/{tenant_id}/use-cases/`
+  - `backend/routers/actions.py` — `GET /api/admin/{tenant_id}/actions`
+  - `backend/routers/uc_runs.py` — `GET /api/admin/{tenant_id}/uc-runs/`
+  - `backend/routers/llm_usage.py` — all 3 endpoints (list, summary, ledger)
+- When `filter_tenant` is provided, routes call `store.list_filtered()` instead of `store.list_for_tenant()`
+
+**Frontend — New component:**
+- `src/app/components/TenantFilter.tsx` — Reusable dropdown component with icons (List/Globe/Building2), displays All Tenants, Global, and tenant names from TenantContext
+
+**Frontend — API layer:**
+- `src/app/services/api.ts` — Added optional `filterTenant` parameter to: `getIntegrations`, `getSkills`, `getUseCases`, `getAllUCRuns`, `getLLMUsage`, `getLLMUsageSummary`, `getLLMUsageLedger`
+
+**Frontend — Page updates:**
+- `src/app/pages/IntegrationsPage.tsx` — Added TenantFilter dropdown, passes filter to API
+- `src/app/pages/SkillsPage.tsx` — Added TenantFilter dropdown, passes filter to API
+- `src/app/pages/UseCasesPage.tsx` — Added TenantFilter dropdown, passes filter to API
+- `src/app/pages/ActionsCatalogPage.tsx` — Replaced hardcoded `acme` with TenantContext, added TenantFilter
+- `src/app/pages/RunsPage.tsx` — Added TenantFilter dropdown, passes filter to API
+- `src/app/pages/CostLedgerPage.tsx` — Replaced hardcoded `TENANT_ID = "acme"` with TenantContext, added TenantFilter
+
+---
+
+## #051 — 2026-03-13 — Multiple GitHub Integrations with Unique Names
+
+**What happened:**
+Allow creating multiple GitHub integrations per tenant, each with a unique user-chosen name. Previously each integration type was limited to one instance per tenant.
+
+**Backend — Model layer:**
+- `backend/models.py` — Added `name: str = ""` field to `Integration` model and `CreateIntegrationRequest`
+
+**Backend — Router layer:**
+- `backend/routers/integrations.py`:
+  - `MULTI_INSTANCE_TYPES = {"github", "servicenow"}` — types in this set skip the one-per-type uniqueness constraint
+  - `create_integration` accepts optional `name`, defaults to catalog name if not provided
+  - `_serialize()` backfills `name` from `INTEGRATION_CATALOG` for old records without a name
+
+**Frontend — API layer:**
+- `src/app/services/api.ts`:
+  - Added `name: string` to `IntegrationResponse` interface
+  - Updated `createIntegration()` to accept optional `name` parameter
+
+**Frontend — Integrations list:**
+- `src/app/pages/IntegrationsPage.tsx`:
+  - Multi-instance types (github, servicenow) remain in "Add" dropdown even when one already exists
+  - Clicking a multi-instance type opens a name prompt modal before creating
+  - Integration cards display the custom name as the primary title with the type name shown below
+
+**Frontend — Integration config:**
+- `src/app/pages/IntegrationConfigPage.tsx`:
+  - Header displays the integration's custom name (with catalog name as subtitle when different)
+
+---
+
+## #052 — 2026-03-13 — Editable Integration Names + Multi-Instance ServiceNow
+
+**What happened:**
+- Added `servicenow` to `MULTI_INSTANCE_TYPES` in backend and frontend, allowing multiple ServiceNow integrations per tenant with unique names
+- Added inline name editing on the integration config page — pencil icon next to the header opens an inline input with save/cancel
+
+**Backend:**
+- `backend/routers/integrations.py`:
+  - `MULTI_INSTANCE_TYPES` now includes `{"github", "servicenow"}`
+  - New `PUT /{integration_id}/name` endpoint accepts `{ "name": "..." }` and updates via store
+
+**Frontend:**
+- `src/app/pages/IntegrationsPage.tsx` — `MULTI_INSTANCE_TYPES` includes `"servicenow"`
+- `src/app/services/api.ts` — New `renameIntegration(tenantId, integrationId, name)` function
+- `src/app/pages/IntegrationConfigPage.tsx` — Pencil icon next to header triggers inline name editing with Enter/Escape keyboard support, save/cancel buttons, and toast feedback
+
+---
+
+## #053 — 2026-03-13 — Delete Integration UI + Revert ServiceNow Multi-Instance
+
+**What happened:**
+- Added delete button with two-step confirmation on the integration config page
+- Reverted ServiceNow back to single-instance (removed from `MULTI_INSTANCE_TYPES`) — only GitHub allows multiple instances
+
+**Backend:**
+- `backend/routers/integrations.py` — `MULTI_INSTANCE_TYPES` reverted to `{"github"}` only
+
+**Frontend:**
+- `src/app/pages/IntegrationsPage.tsx` — `MULTI_INSTANCE_TYPES` reverted to `{"github"}` only
+- `src/app/pages/IntegrationConfigPage.tsx` — Added Delete button (red) in the actions bar with a two-step confirm flow; on confirm calls `api.deleteIntegration()` and navigates back to the integrations list
+
+---
+
+## #054 — 2026-03-13 — Configurable Webservice Endpoints per Integration
+
+**What happened:**
+Each integration can now have a list of named webservice endpoints (URL path + method). Endpoints inherit the parent integration's base URL and auth credentials. The catalog provides suggested default endpoints per integration type. Users can add custom endpoints, edit, delete, and test them individually.
+
+**Backend — Models (`backend/models.py`):**
+- New `IntegrationEndpoint` model: `id`, `name`, `path`, `method`, `headers`, `query_params`, `description`
+- Added `endpoints: list[IntegrationEndpoint]` field to `Integration` model
+- New request models: `AddEndpointRequest`, `UpdateEndpointRequest`
+- `INTEGRATION_CATALOG` entries now include `default_endpoints` lists:
+  - ServiceNow: Search Incidents, Create Incident, Knowledge Base, Service Catalog
+  - Salesforce: Query Records (SOQL), Create Record, Describe SObject
+  - GitHub: List Repos, Create Repo, Repo Contents
+  - Jira: Search Issues (JQL), Create Issue, Get Issue
+
+**Backend — Router (`backend/routers/integrations.py`):**
+- `POST /{integration_id}/endpoints` — add a new endpoint
+- `PUT /{integration_id}/endpoints/{endpoint_id}` — update an endpoint
+- `DELETE /{integration_id}/endpoints/{endpoint_id}` — remove an endpoint
+- `POST /{integration_id}/endpoints/{endpoint_id}/test` — test an endpoint using parent integration's credentials; supports ServiceNow (Basic auth), Jira (email+token), Salesforce (Basic), GitHub (Bearer token) with automatic URL and auth resolution
+
+**Frontend — API (`src/app/services/api.ts`):**
+- New `IntegrationEndpoint` and `CatalogDefaultEndpoint` types
+- Added `endpoints` to `IntegrationResponse`, `default_endpoints` to `IntegrationCatalogEntry`
+- New functions: `addIntegrationEndpoint`, `updateIntegrationEndpoint`, `deleteIntegrationEndpoint`, `testIntegrationEndpoint`
+
+**Frontend — Config Page (`src/app/pages/IntegrationConfigPage.tsx`):**
+- New collapsible "Webservice Endpoints" section below the credentials card
+- Endpoint list with method badge (color-coded GET/POST/PUT/PATCH/DELETE), name, path, description
+- Per-endpoint actions: Test (play button), Edit (pencil), Delete (trash with confirm)
+- Inline edit form with name, method dropdown, path, description
+- "Suggested endpoints" row shows catalog defaults not yet added — one-click to add
+- "Add custom endpoint" form for free-form endpoint creation
+
+**Multi-tenant note:** Integrations are already scoped per `tenant_id`. The uniqueness check `get_by_type(tenant_id, integration_type)` is per-tenant, so Tenant A and Tenant B can each have their own ServiceNow (or any other type) independently.
+
+---
+
+## #055 — 2026-03-13 — Integration Tenant Assignment + Remove Duplicate Filter
+
+**What happened:**
+- Removed the "All Tenants" TenantFilter dropdown from the Integrations page — the top-nav tenant switcher is the single source of tenant context
+- Added a tenant assignment dropdown on the Integration Config page so integrations can be moved between tenants
+- Added backend `PUT /{integration_id}/tenant` endpoint to reassign an integration's tenant
+
+**Backend:**
+- `backend/routers/integrations.py` — New `PUT /{integration_id}/tenant` route: validates target tenant exists, updates `tenant_id` via store
+
+**Frontend:**
+- `src/app/pages/IntegrationsPage.tsx` — Removed `TenantFilter` import, state, and JSX; list now uses only `currentTenantId` from top-nav
+- `src/app/services/api.ts` — New `reassignIntegrationTenant(tenantId, integrationId, newTenantId)` function
+- `src/app/pages/IntegrationConfigPage.tsx` — Added tenant dropdown (Building2 icon + select) in the header below the description; selecting a different tenant calls the reassign API and updates the local state
+
+---
+
+## #056 — 2026-03-13 — All Tenants Option in Top-Nav Tenant Switcher
+
+**What happened:**
+Added an "All Tenants" option to the top-nav tenant dropdown so users can view data across all tenants from a single control. When selected, pages show cross-tenant data and a "Global View" badge appears.
+
+**TenantContext (`src/app/context/TenantContext.tsx`):**
+- New exported constant `ALL_TENANTS = "__all__"`
+- New derived values: `isAllTenants` (boolean), `apiTenantId` (first real tenant ID for API URL paths when "All" is selected)
+- `refreshTenants` preserves `__all__` selection across refreshes
+
+**TopBar (`src/app/components/TopBar.tsx`):**
+- Added "All Tenants" option at the top of the dropdown with a List icon, separated by a border
+- Shows "Global View" blue badge when All Tenants is active
+- Shows List icon next to "All Tenants" label in the collapsed button
+
+**IntegrationsPage (`src/app/pages/IntegrationsPage.tsx`):**
+- Uses `apiTenantId` and `isAllTenants` from context
+- When "All Tenants" is selected, passes `filter_tenant=all` to `getIntegrations` so backend returns integrations across all tenants
+
+**IntegrationConfigPage (`src/app/pages/IntegrationConfigPage.tsx`):**
+- Uses `effectiveTenantId` derived from `integration.tenant_id || apiTenantId`
+- Ensures the config page works correctly when navigated to from the "All Tenants" view
+
+---
+
+## #057 — 2026-03-13 — Refactor ServiceNow Actions to Use Integration Endpoints
+
+**What happened:**
+Refactored the ServiceNow-to-Replit and ServiceNow-to-GitHub actions to resolve REST endpoint URLs from the integration's configured webservice endpoints instead of hardcoding URLs. Fixed a critical bug where `snow_to_replit.py` had a hardcoded `dev221705.service-now.com` instance URL.
+
+**New helper (`backend/services/servicenow_tools.py`):**
+- `get_endpoint_url(tenant_id, endpoint_name, app, **path_vars)` — looks up a named endpoint from the tenant's ServiceNow integration, substitutes path variables (e.g. `{title}`, `{sys_id}`), and returns the full URL. Returns `None` if not found, allowing callers to fall back.
+
+**Refactored actions:**
+- `backend/services/snow_to_replit.py`:
+  - `convert_catalog_to_replit()` — now supports `endpoint:Name|key=val` syntax in `service_url` parameter, resolving the URL from integration endpoints
+  - `convert_catalog_by_title_to_replit()` — uses `get_endpoint_url("Catalog by Title", title=...)` instead of hardcoded URL. Falls back to config `instance_url` if endpoint not found.
+- `backend/services/snow_to_github.py`:
+  - `convert_catalog_to_github()` — both "List Catalogs" and "Catalog by Title" lookups now use `get_endpoint_url()` with fallback
+
+**Demo seed (`backend/bootstrap/demo_setup.py`):**
+- ACME's ServiceNow integration now seeds 5 webservice endpoints: Catalog by URL, Catalog by Title, List Catalogs, Search Incidents, Knowledge Base
+- "ServiceNow to Replit" action parameter changed from hardcoded URL to `endpoint:Catalog by URL|sys_id=2ab7077237153000158bbfc8bcbe5da9`
+
+**Catalog defaults (`backend/models.py`):**
+- Added 3 catalog endpoints to ServiceNow's `default_endpoints` in `INTEGRATION_CATALOG`: List Catalogs, Catalog by Title, Catalog by URL — these appear as one-click suggestions on any new ServiceNow integration
+
+## #058 — 2026-03-13 — Webservice Endpoint Tester with Record Extraction
+
+**What happened:**
+Added a full webservice endpoint tester UI to the integration config page. Users can validate endpoints, extract sample records, view raw response payloads, and supply path variables without editing the endpoint definition.
+
+**Backend (`backend/routers/integrations.py`):**
+- `_build_endpoint_request()` now accepts `path_vars: dict` — substitutes `{key}` placeholders in the URL at call time and strips any remaining unresolved placeholders
+- `POST .../test` — now accepts optional `{path_vars, limit}` body; returns `response_body` (truncated to 4KB) alongside status/latency
+- `POST .../fetch` — now accepts `path_vars` in body alongside `limit`
+- Extracted shared helper handles URL/auth/header resolution across ServiceNow (Basic), Jira (email+token), GitHub (Bearer), Salesforce, Replit
+
+**Frontend (`src/app/services/api.ts`):**
+- `testIntegrationEndpoint` — accepts optional `{path_vars, limit}` opts; return type includes `response_body`
+- `fetchEndpointRecords` — accepts optional `path_vars` parameter
+
+**Frontend (`src/app/pages/IntegrationConfigPage.tsx`):**
+- **Path variable inputs**: Tester panel detects `{var}` patterns in endpoint path and renders labeled inline inputs for each (e.g. `{sys_id}`, `{title}`). Values are sent to both test and fetch calls — no need to edit the endpoint definition.
+- **Response payload viewer**: After a test (Play button), a "Response" toggle appears inline with the result. Clicking it expands a dark-themed `<pre>` block showing the prettified JSON (or raw text) response body (up to 4KB).
+- **Limit control**: Tester panel has a numeric limit input (1–25) that applies to both Test and Fetch operations.
+- **Combined test + fetch**: The tester panel now has both a "Test" button (lightweight check) and a "Fetch Records" button (extracts records into a table), sharing the same path variable inputs and limit.
+- Records table shows up to 8 columns with truncated values and hover tooltips, scrollable to 384px height.
+
+## #059 — 2026-03-13 — Auto-Prompt for Path Variables on Test/Fetch
+
+**What happened:**
+When a user clicks Test (Play) or Fetch (Search) on an endpoint that has `{var}` placeholders in its path (e.g. `/api/now/table/sc_cat_item/{sys_id}`), an amber inline prompt automatically appears below the endpoint row asking the user to fill in the required values before the call executes. Once filled and submitted, the values persist so subsequent clicks execute immediately without re-prompting.
+
+**Backend (`backend/routers/integrations.py`):**
+- `_build_endpoint_request()` path_vars substitution now strips any remaining unresolved `{var}` placeholders from the URL after substitution (safety net)
+
+**Frontend (`src/app/pages/IntegrationConfigPage.tsx`):**
+- New state: `promptEpId` / `promptAction` track which endpoint is awaiting path variable input and what action (test or fetch) triggered it
+- `requirePathVars(epId, action)` — checks if the endpoint has `{var}` patterns and if any are unfilled; if so, shows the amber prompt and returns `true` (caller aborts); if all filled or no vars needed, returns `false` (proceed)
+- Amber prompt UI: compact inline panel with a labeled input for each `{var}`, auto-focus on first field, Enter to submit, Escape to cancel, "Run Test" or "Fetch" button, Cancel button
+- Play button on endpoint row: gates through `requirePathVars` — prompts if needed, else fires immediately
+- Tester panel's Test/Fetch buttons call `doTest`/`doFetch` directly (no re-prompting since inputs are already visible in the panel)
+- Path var values persist across interactions within the same session — fill once, test repeatedly
+
+## #060 — 2026-03-13 — Fix ServiceNow Endpoint URLs + Show Resolved URL on Errors
+
+**What happened:**
+Corrected the ServiceNow scripted REST API endpoint URLs across all files (seed data, catalog defaults, service fallbacks) to match the actual ServiceNow instance paths. Added resolved URL display on connection errors for easier debugging.
+
+**Correct URLs (authoritative):**
+- **Catalog by Title**: `/api/1939459/catalogbytitleservic/catalog/{catalogTitle}`
+- **List Catalogs**: `/api/1939459/catalogtitleservice`
+- **Catalog by URL**: `/api/1939459/catalogunderstandingservice/loveboat/{sys_id}` (unchanged)
+
+**Files updated:**
+- `backend/bootstrap/demo_setup.py` — seed endpoint paths + path var name `{title}` → `{catalogTitle}`
+- `backend/models.py` — `INTEGRATION_CATALOG` default_endpoints for ServiceNow
+- `backend/services/snow_to_replit.py` — fallback URL + `get_endpoint_url` kwarg `title=` → `catalogTitle=`
+- `backend/services/snow_to_github.py` — both List Catalogs fallback URLs + Catalog by Title fallback + kwarg rename
+
+**Debugging improvement:**
+- `resolved_url` is now returned in error responses (including connection exceptions) from both test and fetch endpoints, so the UI always shows what URL was attempted
+
+## #061 — 2026-03-13 — Tools Page in Left Sidebar
+
+**What happened:**
+Added a dedicated Tools page to the admin portal, accessible from the left sidebar between Integrations and Tools. Shows all tools from the catalog grouped by integration type, with availability status based on enabled integrations.
+
+**New file — `src/app/pages/ToolsPage.tsx`:**
+- Groups tools by integration type (ServiceNow, Google Drive, Jira, GitHub, Slack, Salesforce, Replit)
+- Each group shows: integration name, tool count badge, connection status (Connected / N/M available / Not connected)
+- Collapsible groups with chevron toggle
+- Each tool row shows: name, tool_id (monospace), description, input/output schema tags, Available/Unavailable badge
+- Unavailable tools (no enabled integration) shown at 50% opacity
+- "All Tools" / "Available Only" toggle in header
+- Tenant filter dropdown (All Tenants / specific tenant)
+- Fetches both `/tools/catalog` (all tools) and `/tools/available` (tools with enabled integrations) in parallel
+
+**Updated files:**
+- `src/app/components/Layout.tsx` — added Wrench icon + "Tools" nav item between Integrations and Skills
+- `src/app/routes.tsx` — added `/tools` route pointing to ToolsPage
+
+**Sidebar order now follows the dependency chain:** Tenants → Integrations → Tools → Skills → Use Cases → Actions
+
+## #062 — 2026-03-13 — Platform Modules PDF with Embedded Screenshots
+
+**What happened:**
+Generated a technical PDF (`OverYonder-Platform-Modules.pdf`) documenting the six core modules — Tenants, Integrations, Tools, Skills, Use Cases, Actions — with 7 embedded screenshots from the running application.
+
+**New files:**
+- `generate_modules_pdf.py` — ReportLab-based PDF generator covering architecture overview, all 6 modules (data models, API endpoints, features), cross-module relationships, end-to-end execution flow, and data model summary
+- `capture_screenshots.mjs` — Playwright script capturing 7 admin portal pages at 2x DPI (1440×900): tenants, integrations, integration-config, tools, skills, use-cases, actions
+- `screenshots/` — 7 PNG screenshots (01-tenants through 07-actions)
+- `OverYonder-Platform-Modules.pdf` — 1.6MB, ~14 pages with screenshots inline in each module section
+
+**Screenshot placement:**
+- Section 2 (Tenants): tenants list view
+- Section 3 (Integrations): integrations list + integration config detail (2 screenshots)
+- Section 4 (Tools): tools catalog grouped by integration type
+- Section 5 (Skills): skills catalog with tool assignments
+- Section 6 (Use Cases): workflows with trigger keywords
+- Section 7 (Actions): actions catalog with recommendation rules

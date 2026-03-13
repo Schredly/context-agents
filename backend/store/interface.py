@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from models import Action, AgentEvent, AgentRun, AgentUIRun, AgentUIRunEvent, ApplicationGenome, ClassificationSchema, ExtractionPayload, FeedbackEvent, GenomeArtifact, GoogleDriveConfig, Integration, LLMConfig, LLMUsageEvent, MetricsEvent, ReplitConfig, RunTelemetry, ServiceNowConfig, Skill, Tenant, TenantLLMAssignment, UseCase, UseCaseRun
+from models import Action, AgentEvent, AgentRun, AgentUIRun, AgentUIRunEvent, ApplicationGenome, ClassificationSchema, ExtractionPayload, FeedbackEvent, GenomeArtifact, GoogleDriveConfig, Integration, LLMConfig, LLMUsageEvent, ManagedIntegration, MetricsEvent, ReplitConfig, RunTelemetry, ServiceNowConfig, Skill, Tenant, TenantLLMAssignment, UseCase, UseCaseRun
 
 
 class TenantStore(ABC):
@@ -157,6 +157,11 @@ class IntegrationStore(ABC):
     async def list_for_tenant(self, tenant_id: str) -> list[Integration]: ...
 
     @abstractmethod
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[Integration]:
+        """None/'all' → everything, 'GLOBAL' → only global, else → tenant + GLOBAL."""
+        ...
+
+    @abstractmethod
     async def update(self, integration_id: str, **kwargs: Any) -> Optional[Integration]: ...
 
     @abstractmethod
@@ -177,6 +182,11 @@ class SkillStore(ABC):
     async def list_for_tenant(self, tenant_id: str) -> list[Skill]: ...
 
     @abstractmethod
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[Skill]:
+        """None/'all' → everything, 'GLOBAL' → only global, else → tenant + GLOBAL."""
+        ...
+
+    @abstractmethod
     async def update(self, skill_id: str, **kwargs: Any) -> Optional[Skill]: ...
 
     @abstractmethod
@@ -194,6 +204,11 @@ class UseCaseStore(ABC):
     async def list_for_tenant(self, tenant_id: str) -> list[UseCase]: ...
 
     @abstractmethod
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[UseCase]:
+        """None/'all' → everything, 'GLOBAL' → only global, else → tenant + GLOBAL."""
+        ...
+
+    @abstractmethod
     async def update(self, use_case_id: str, **kwargs: Any) -> Optional[UseCase]: ...
 
     @abstractmethod
@@ -209,6 +224,11 @@ class UseCaseRunStore(ABC):
 
     @abstractmethod
     async def list_for_tenant(self, tenant_id: str) -> list[UseCaseRun]: ...
+
+    @abstractmethod
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[UseCaseRun]:
+        """None/'all' → everything, 'GLOBAL' → only global, else → tenant + GLOBAL."""
+        ...
 
     @abstractmethod
     async def list_for_use_case(self, use_case_id: str) -> list[UseCaseRun]: ...
@@ -247,6 +267,11 @@ class LLMUsageStore(ABC):
     async def list_for_tenant(self, tenant_id: str) -> list[LLMUsageEvent]: ...
 
     @abstractmethod
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[LLMUsageEvent]:
+        """None/'all' → everything, 'GLOBAL' → only global, else → tenant + GLOBAL."""
+        ...
+
+    @abstractmethod
     async def list_for_run(self, run_id: str) -> list[LLMUsageEvent]: ...
 
     @abstractmethod
@@ -262,6 +287,11 @@ class ActionStore(ABC):
 
     @abstractmethod
     async def list_for_tenant(self, tenant_id: str) -> list[Action]: ...
+
+    @abstractmethod
+    async def list_filtered(self, tenant_id: Optional[str] = None) -> list[Action]:
+        """None/'all' → everything, 'GLOBAL' → only global, else → tenant + GLOBAL."""
+        ...
 
     @abstractmethod
     async def update(self, action_id: str, **kwargs: Any) -> Optional[Action]: ...
@@ -313,3 +343,20 @@ class ExtractionPayloadStore(ABC):
 
     @abstractmethod
     async def find_by_payload_hash(self, payload_hash: str) -> Optional[ExtractionPayload]: ...
+
+
+class ManagedIntegrationStore(ABC):
+    @abstractmethod
+    async def create(self, integration: ManagedIntegration) -> ManagedIntegration: ...
+
+    @abstractmethod
+    async def get(self, integration_id: str) -> Optional[ManagedIntegration]: ...
+
+    @abstractmethod
+    async def list_for_tenant(self, tenant_id: str) -> list[ManagedIntegration]: ...
+
+    @abstractmethod
+    async def update(self, integration_id: str, **kwargs: Any) -> Optional[ManagedIntegration]: ...
+
+    @abstractmethod
+    async def delete(self, integration_id: str) -> bool: ...

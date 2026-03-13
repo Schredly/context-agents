@@ -29,9 +29,13 @@ async def list_usage(
     time_filter: str = Query("24h"),
     start_time: Optional[str] = Query(None),
     end_time: Optional[str] = Query(None),
+    filter_tenant: Optional[str] = Query(None),
 ):
     """List LLM usage events for a tenant, with optional time filtering."""
-    events = await request.app.state.llm_usage_store.list_for_tenant(tenant_id)
+    if filter_tenant is not None:
+        events = await request.app.state.llm_usage_store.list_filtered(filter_tenant)
+    else:
+        events = await request.app.state.llm_usage_store.list_for_tenant(tenant_id)
 
     cutoff = _parse_time_filter(time_filter)
     if cutoff:
@@ -66,9 +70,13 @@ async def usage_summary(
     tenant_id: str,
     request: Request,
     time_filter: str = Query("24h"),
+    filter_tenant: Optional[str] = Query(None),
 ):
     """Compute summary metrics for the cost ledger cards."""
-    events = await request.app.state.llm_usage_store.list_for_tenant(tenant_id)
+    if filter_tenant is not None:
+        events = await request.app.state.llm_usage_store.list_filtered(filter_tenant)
+    else:
+        events = await request.app.state.llm_usage_store.list_for_tenant(tenant_id)
 
     cutoff = _parse_time_filter(time_filter)
     if cutoff:
@@ -116,9 +124,13 @@ async def cost_ledger(
     request: Request,
     time_filter: str = Query("24h"),
     group_by: str = Query("none"),
+    filter_tenant: Optional[str] = Query(None),
 ):
     """Return ledger data, optionally grouped by a dimension."""
-    events = await request.app.state.llm_usage_store.list_for_tenant(tenant_id)
+    if filter_tenant is not None:
+        events = await request.app.state.llm_usage_store.list_filtered(filter_tenant)
+    else:
+        events = await request.app.state.llm_usage_store.list_for_tenant(tenant_id)
 
     cutoff = _parse_time_filter(time_filter)
     if cutoff:

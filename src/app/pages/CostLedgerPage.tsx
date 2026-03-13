@@ -8,15 +8,17 @@ import {
   X,
   Clock,
 } from "lucide-react";
+import { useTenants } from "../context/TenantContext";
+import { TenantFilter, type TenantFilterValue } from "../components/TenantFilter";
 import { getLLMUsageLedger, getLLMUsageSummary } from "../services/api";
 import type { LLMUsageRow, LLMUsageSummary } from "../services/api";
 
 type TimeFilter = "1h" | "24h" | "7d" | "30d" | "custom";
 type GroupBy = "none" | "model" | "useCase" | "tenant" | "skill";
 
-const TENANT_ID = "acme";
-
 export default function CostLedgerPage() {
+  const { currentTenantId } = useTenants();
+  const [filterTenant, setFilterTenant] = useState<TenantFilterValue>("all");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("24h");
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
   const [selectedExecution, setSelectedExecution] = useState<LLMUsageRow | null>(null);
@@ -33,13 +35,14 @@ export default function CostLedgerPage() {
   });
 
   useEffect(() => {
-    getLLMUsageLedger(TENANT_ID, timeFilter, groupBy)
+    const tenantId = currentTenantId || "acme";
+    getLLMUsageLedger(tenantId, timeFilter, groupBy, filterTenant)
       .then(setLedgerData)
       .catch(() => setLedgerData([]));
-    getLLMUsageSummary(TENANT_ID, timeFilter)
+    getLLMUsageSummary(tenantId, timeFilter, filterTenant)
       .then(setSummaryMetrics)
       .catch(() => {});
-  }, [timeFilter, groupBy]);
+  }, [currentTenantId, filterTenant, timeFilter, groupBy]);
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
@@ -53,6 +56,9 @@ export default function CostLedgerPage() {
             Financial transaction ledger showing LLM usage and cost across the
             system.
           </p>
+          <div className="mt-2">
+            <TenantFilter value={filterTenant} onChange={setFilterTenant} />
+          </div>
         </div>
 
         {/* Summary Cards */}

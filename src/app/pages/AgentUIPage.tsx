@@ -8,6 +8,7 @@ import { SkillExecutionTimeline, type SkillExecution } from "../components/agent
 import { ToolsUsed, type ToolCall } from "../components/agentui/ToolsUsed";
 import { AIRecommendation, type SuggestedAction } from "../components/agentui/AIRecommendation";
 import { AgentActions, type ActionType } from "../components/agentui/AgentActions";
+import { PromptEditor } from "../components/agentui/PromptEditor";
 import { streamAgent } from "../services/agentStream";
 
 interface Message {
@@ -16,12 +17,17 @@ interface Message {
   content: string;
   timestamp: string;
   result?: string;
+  catalogData?: string;
+  draftLabel?: string;
 }
 
 interface DraftState {
   actionId: string;
   draftPrompt: string;
   catalogData: string;
+  approveLabel?: string;
+  draftLabel?: string;
+  target?: string;
 }
 
 interface InputCollectionState {
@@ -73,7 +79,7 @@ export default function AgentUIPage() {
   const skillCountRef = useRef(0);
   const toolCountRef = useRef(0);
 
-  // Keep ref in sync so handleApproveReplit always reads the latest draft
+  // Keep ref in sync so handleApprove always reads the latest draft
   useEffect(() => {
     draftStateRef.current = draftState;
   }, [draftState]);
@@ -98,7 +104,7 @@ export default function AgentUIPage() {
         { message: "Fetching catalog from ServiceNow...", delayMs: 1500 },
         { message: "Received catalog data — cleaning and formatting...", delayMs: 4000 },
         { message: "Analyzing catalog structure...", delayMs: 6000 },
-        { message: "Generating draft Replit prompt...", delayMs: 9000 },
+        { message: "Generating draft prompt...", delayMs: 9000 },
         { message: "Finalizing draft — almost done...", delayMs: 20000 },
       ]);
 
@@ -130,20 +136,28 @@ export default function AgentUIPage() {
         }
 
         if (data.status === "draft" && data.draft_prompt) {
-          // Transition to draft/refine mode
+          // Transition to draft mode
           setInputState(null);
           setDraftState({
             actionId: inputState.actionId,
             draftPrompt: data.draft_prompt,
             catalogData: data.catalog_data || "",
+            approveLabel: data.approve_label || undefined,
+            draftLabel: data.draft_label || undefined,
+            target: data.target || undefined,
           });
-          const agentMsg: Message = {
-            id: (Date.now() + 1).toString(),
-            type: "agent-draft",
-            content: data.draft_prompt,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          };
-          setMessages((prev) => [...prev, agentMsg]);
+          // For GitHub target, the PromptEditor component handles display — no message needed
+          if (data.target !== "github") {
+            const agentMsg: Message = {
+              id: (Date.now() + 1).toString(),
+              type: "agent-draft",
+              content: data.draft_prompt,
+              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              catalogData: data.catalog_data || undefined,
+              draftLabel: data.draft_label || undefined,
+            };
+            setMessages((prev) => [...prev, agentMsg]);
+          }
         } else if (data.status === "error") {
           setInputState(null);
           const errMsg: Message = {
@@ -183,8 +197,8 @@ export default function AgentUIPage() {
       return;
     }
 
-    // --- Refinement mode: call refine-prompt instead of streamAgent ---
-    if (draftState) {
+    // --- Refinement mode: call refine-prompt instead of streamAgent (non-GitHub drafts only) ---
+    if (draftState && draftState.target !== "github") {
       const userMsg: Message = { id: Date.now().toString(), type: "user", content, timestamp: now };
       setMessages((prev) => [...prev, userMsg]);
       setIsLoading(true);
@@ -390,22 +404,30 @@ export default function AgentUIPage() {
     cancelRef.current = cancel;
   };
 
-  const handleDraftReady = (result: { draft_prompt: string; catalog_data: string; action_id: string }) => {
+  const handleDraftReady = (result: { draft_prompt: string; catalog_data: string; action_id: string; approve_label?: string; draft_label?: string; target?: string }) => {
     setDraftState({
       actionId: result.action_id,
       draftPrompt: result.draft_prompt,
       catalogData: result.catalog_data,
+      approveLabel: result.approve_label,
+      draftLabel: result.draft_label,
+      target: result.target,
     });
-    const agentMsg: Message = {
-      id: Date.now().toString(),
-      type: "agent-draft",
-      content: result.draft_prompt,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-    setMessages((prev) => [...prev, agentMsg]);
+    // For GitHub target, PromptEditor handles display inline
+    if (result.target !== "github") {
+      const agentMsg: Message = {
+        id: Date.now().toString(),
+        type: "agent-draft",
+        content: result.draft_prompt,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        catalogData: result.catalog_data || undefined,
+        draftLabel: result.draft_label || undefined,
+      };
+      setMessages((prev) => [...prev, agentMsg]);
+    }
   };
 
-  const handleApproveReplit = async () => {
+  const handleApprove = async () => {
     const currentDraft = draftStateRef.current;
     if (!currentDraft) return;
 
@@ -417,10 +439,19 @@ export default function AgentUIPage() {
 
     setIsLoading(true);
     try {
-      const res = await fetch("/api/admin/acme/agent/approve-replit", {
+      const endpoint = currentDraft.target === "github"
+        ? "/api/admin/acme/agent/approve-github"
+        : "/api/admin/acme/agent/approve-replit";
+
+      const bodyPayload: Record<string, string> = { approved_prompt: promptToCopy };
+      if (currentDraft.target === "github" && currentDraft.catalogData) {
+        bodyPayload.catalog_data = currentDraft.catalogData;
+      }
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approved_prompt: promptToCopy }),
+        body: JSON.stringify(bodyPayload),
       });
       const data = await res.json();
       if (data.repl_url) {
@@ -431,7 +462,7 @@ export default function AgentUIPage() {
         type: "agent-result",
         content: "",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        result: data.message || "Repl created successfully!",
+        result: data.message || "Approved successfully!",
       };
       setMessages((prev) => [...prev, successMsg]);
     } catch (err) {
@@ -441,7 +472,39 @@ export default function AgentUIPage() {
         type: "agent-result",
         content: "",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        result: `Failed to create repl: ${errText}`,
+        result: `Approval failed: ${errText}`,
+      };
+      setMessages((prev) => [...prev, errMsg]);
+    }
+    setDraftState(null);
+    setIsLoading(false);
+  };
+
+  const handleCommitToGithub = async (prompt: string, payload: string) => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/admin/acme/agent/commit-github", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, payload }),
+      });
+      const data = await res.json();
+      const successMsg: Message = {
+        id: Date.now().toString(),
+        type: "agent-result",
+        content: "",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        result: data.message || "Committed to GitHub successfully!",
+      };
+      setMessages((prev) => [...prev, successMsg]);
+    } catch (err) {
+      const errText = err instanceof Error ? err.message : "Network error";
+      const errMsg: Message = {
+        id: Date.now().toString(),
+        type: "agent-result",
+        content: "",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        result: `Commit failed: ${errText}`,
       };
       setMessages((prev) => [...prev, errMsg]);
     }
@@ -456,7 +519,7 @@ export default function AgentUIPage() {
       type: "agent-structured",
       content: "",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      result: "Prompt refinement cancelled.",
+      result: "Prompt editing cancelled.",
     };
     setMessages((prev) => [...prev, cancelMsg]);
   };
@@ -565,16 +628,44 @@ export default function AgentUIPage() {
                     return <p className="text-sm text-[#C7D2DA] whitespace-pre-wrap leading-relaxed">{cleaned}</p>;
                   };
 
+                  const tryPrettyPrint = (raw: string) => {
+                    try { return JSON.stringify(JSON.parse(raw), null, 2); } catch { return raw; }
+                  };
+
                   return (
                     <div key={message.id} className="bg-[#102A43] border border-amber-500/30 rounded-[10px] p-4">
                       <div className="flex items-center gap-2 mb-3">
                         <div className="w-2 h-2 rounded-full bg-amber-500" />
-                        <span className="text-xs font-medium text-amber-400 uppercase tracking-wider">Draft Replit Prompt</span>
+                        <span className="text-xs font-medium text-amber-400 uppercase tracking-wider">
+                          {message.draftLabel || "Draft Prompt"}
+                        </span>
                         <span className="text-xs text-[#8FA7B5] ml-auto">{message.timestamp}</span>
                       </div>
+
+                      {/* Prompt section (editable via refinement) */}
+                      {message.catalogData && (
+                        <div className="mb-2">
+                          <span className="text-[10px] font-medium text-[#8FA7B5] uppercase tracking-wider">Prompt (editable)</span>
+                        </div>
+                      )}
                       {renderDraftContent(message.content)}
+
+                      {/* Payload section (read-only) */}
+                      {message.catalogData && (
+                        <div className="mt-4">
+                          <div className="mb-2">
+                            <span className="text-[10px] font-medium text-[#8FA7B5] uppercase tracking-wider">Payload (read only)</span>
+                          </div>
+                          <div className="bg-[#0B1E2D] rounded-lg p-3 border border-[#2F5F7A] overflow-auto max-h-[400px] custom-scrollbar">
+                            <pre className="text-xs text-[#8FD6E8] whitespace-pre-wrap font-mono leading-relaxed">
+                              {tryPrettyPrint(message.catalogData)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
                       <p className="text-xs text-[#8FA7B5] mt-3">
-                        Type feedback below to refine, or click "Approve &amp; Send to Replit" when ready.
+                        Type feedback below to refine, or click the approve button when ready.
                       </p>
                     </div>
                   );
@@ -631,6 +722,19 @@ export default function AgentUIPage() {
               {/* Show actions only when NOT in draft/refine or input mode */}
               {/* (draft mode has its own Approve/Refine controls in the InputPanel) */}
 
+              {/* Inline PromptEditor for GitHub drafts */}
+              {draftState?.target === "github" && !isLoading && (
+                <PromptEditor
+                  initialPrompt={draftState.draftPrompt}
+                  payload={draftState.catalogData}
+                  draftLabel={draftState.draftLabel}
+                  commitLabel={draftState.approveLabel || "Commit to GitHub"}
+                  onCommit={handleCommitToGithub}
+                  onCancel={handleCancelRefine}
+                  disabled={isLoading}
+                />
+              )}
+
               {isLoading && (
                 <div className="flex items-center gap-3 text-[#C7D2DA] py-4">
                   <div className="w-2 h-2 rounded-full bg-[#2E86AB] animate-pulse" />
@@ -640,15 +744,18 @@ export default function AgentUIPage() {
             </div>
           </div>
 
-          {/* Fixed Input Panel at Bottom */}
-          <InputPanel
-            onSend={handleSendMessage}
-            disabled={isLoading}
-            mode={draftState ? "refine" : inputState ? "input" : "normal"}
-            onApprove={draftState ? handleApproveReplit : undefined}
-            onCancelRefine={draftState ? handleCancelRefine : undefined}
-            inputPrompt={inputState?.prompt}
-          />
+          {/* Fixed Input Panel at Bottom — hidden when PromptEditor is active */}
+          {!(draftState?.target === "github") && (
+            <InputPanel
+              onSend={handleSendMessage}
+              disabled={isLoading}
+              mode={draftState ? "refine" : inputState ? "input" : "normal"}
+              onApprove={draftState ? handleApprove : undefined}
+              onCancelRefine={draftState ? handleCancelRefine : undefined}
+              inputPrompt={inputState?.prompt}
+              approveLabel={draftState?.approveLabel}
+            />
+          )}
         </div>
 
         {/* Right: Agent Execution Trace Panel (hidden at narrow viewports / high zoom) */}

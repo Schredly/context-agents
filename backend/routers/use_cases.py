@@ -3,8 +3,9 @@ import json
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from models import (
@@ -39,8 +40,10 @@ async def _validate_steps(steps: list[UseCaseStep], tenant_id: str, request: Req
 
 
 @router.get("/")
-async def list_use_cases(tenant_id: str, request: Request):
+async def list_use_cases(tenant_id: str, request: Request, filter_tenant: Optional[str] = Query(None)):
     await _require_tenant(tenant_id, request)
+    if filter_tenant is not None:
+        return await request.app.state.use_case_store.list_filtered(filter_tenant)
     return await request.app.state.use_case_store.list_for_tenant(tenant_id)
 
 

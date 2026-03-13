@@ -632,21 +632,41 @@ export function saveAnswerToDrive(
 
 // --- Integrations ---
 
+export interface IntegrationEndpoint {
+  id: string;
+  name: string;
+  path: string;
+  method: string;
+  headers: Record<string, string>;
+  query_params: Record<string, string>;
+  description: string;
+}
+
 export interface IntegrationResponse {
   id: string;
   tenant_id: string;
   integration_type: string;
+  name: string;
   enabled: boolean;
   config: Record<string, string>;
+  endpoints: IntegrationEndpoint[];
   connection_status: 'connected' | 'not-connected' | 'error';
   created_at: string;
   updated_at: string;
+}
+
+export interface CatalogDefaultEndpoint {
+  name: string;
+  path: string;
+  method: string;
+  description: string;
 }
 
 export interface IntegrationCatalogEntry {
   name: string;
   description: string;
   config_fields: string[];
+  default_endpoints: CatalogDefaultEndpoint[];
 }
 
 export function getIntegrationCatalog(
@@ -657,8 +677,10 @@ export function getIntegrationCatalog(
 
 export function getIntegrations(
   tenantId: string,
+  filterTenant?: string,
 ): Promise<IntegrationResponse[]> {
-  return request(`/admin/${tenantId}/integrations`);
+  const qs = filterTenant ? `?filter_tenant=${encodeURIComponent(filterTenant)}` : '';
+  return request(`/admin/${tenantId}/integrations${qs}`);
 }
 
 export function getIntegration(
@@ -671,10 +693,33 @@ export function getIntegration(
 export function createIntegration(
   tenantId: string,
   integrationType: string,
+  name?: string,
 ): Promise<IntegrationResponse> {
   return request(`/admin/${tenantId}/integrations`, {
     method: 'POST',
-    body: JSON.stringify({ integration_type: integrationType }),
+    body: JSON.stringify({ integration_type: integrationType, ...(name ? { name } : {}) }),
+  });
+}
+
+export function reassignIntegrationTenant(
+  tenantId: string,
+  integrationId: string,
+  newTenantId: string,
+): Promise<IntegrationResponse> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/tenant`, {
+    method: 'PUT',
+    body: JSON.stringify({ tenant_id: newTenantId }),
+  });
+}
+
+export function renameIntegration(
+  tenantId: string,
+  integrationId: string,
+  name: string,
+): Promise<IntegrationResponse> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/name`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
   });
 }
 
@@ -725,6 +770,66 @@ export function deleteIntegration(
   });
 }
 
+// --- Integration Endpoints ---
+
+export function addIntegrationEndpoint(
+  tenantId: string,
+  integrationId: string,
+  payload: { name: string; path: string; method?: string; headers?: Record<string, string>; query_params?: Record<string, string>; description?: string },
+): Promise<IntegrationResponse> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/endpoints`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateIntegrationEndpoint(
+  tenantId: string,
+  integrationId: string,
+  endpointId: string,
+  payload: { name?: string; path?: string; method?: string; headers?: Record<string, string>; query_params?: Record<string, string>; description?: string },
+): Promise<IntegrationResponse> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/endpoints/${endpointId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteIntegrationEndpoint(
+  tenantId: string,
+  integrationId: string,
+  endpointId: string,
+): Promise<{ ok: boolean }> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/endpoints/${endpointId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function testIntegrationEndpoint(
+  tenantId: string,
+  integrationId: string,
+  endpointId: string,
+  opts?: { path_vars?: Record<string, string>; limit?: number },
+): Promise<{ ok: boolean; status_code?: number; latency_ms?: number; resolved_url?: string; response_body?: string; detail?: string }> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/endpoints/${endpointId}/test`, {
+    method: 'POST',
+    body: JSON.stringify({ path_vars: opts?.path_vars, limit: opts?.limit }),
+  });
+}
+
+export function fetchEndpointRecords(
+  tenantId: string,
+  integrationId: string,
+  endpointId: string,
+  limit: number = 5,
+  path_vars?: Record<string, string>,
+): Promise<{ ok: boolean; status_code?: number; latency_ms?: number; record_count?: number; records?: Record<string, unknown>[]; detail?: string }> {
+  return request(`/admin/${tenantId}/integrations/${integrationId}/endpoints/${endpointId}/fetch`, {
+    method: 'POST',
+    body: JSON.stringify({ limit, path_vars }),
+  });
+}
+
 // --- Tools ---
 
 export interface ToolCatalogEntry {
@@ -767,8 +872,9 @@ export interface SkillResponse {
   updated_at: string;
 }
 
-export function getSkills(tenantId: string): Promise<SkillResponse[]> {
-  return request(`/admin/${tenantId}/skills`);
+export function getSkills(tenantId: string, filterTenant?: string): Promise<SkillResponse[]> {
+  const qs = filterTenant ? `?filter_tenant=${encodeURIComponent(filterTenant)}` : '';
+  return request(`/admin/${tenantId}/skills${qs}`);
 }
 
 export function getSkill(
@@ -844,8 +950,9 @@ export interface UseCaseResponse {
 
 // (RunUseCaseResponse replaced by UseCaseRunResponse below)
 
-export function getUseCases(tenantId: string): Promise<UseCaseResponse[]> {
-  return request(`/admin/${tenantId}/use-cases`);
+export function getUseCases(tenantId: string, filterTenant?: string): Promise<UseCaseResponse[]> {
+  const qs = filterTenant ? `?filter_tenant=${encodeURIComponent(filterTenant)}` : '';
+  return request(`/admin/${tenantId}/use-cases${qs}`);
 }
 
 export function getUseCase(
@@ -966,8 +1073,10 @@ export function getUseCaseRun(
 
 export function getAllUCRuns(
   tenantId: string,
+  filterTenant?: string,
 ): Promise<UseCaseRunResponse[]> {
-  return request(`/admin/${tenantId}/uc-runs`);
+  const qs = filterTenant ? `?filter_tenant=${encodeURIComponent(filterTenant)}` : '';
+  return request(`/admin/${tenantId}/uc-runs${qs}`);
 }
 
 export function getUCRun(
@@ -1064,23 +1173,29 @@ export interface LLMUsageSummary {
 export function getLLMUsage(
   tenantId: string,
   timeFilter: string = '24h',
+  filterTenant?: string,
 ): Promise<LLMUsageRow[]> {
-  return request(`/admin/${tenantId}/llm-usage?time_filter=${timeFilter}`);
+  const ft = filterTenant ? `&filter_tenant=${encodeURIComponent(filterTenant)}` : '';
+  return request(`/admin/${tenantId}/llm-usage?time_filter=${timeFilter}${ft}`);
 }
 
 export function getLLMUsageSummary(
   tenantId: string,
   timeFilter: string = '24h',
+  filterTenant?: string,
 ): Promise<LLMUsageSummary> {
-  return request(`/admin/${tenantId}/llm-usage/summary?time_filter=${timeFilter}`);
+  const ft = filterTenant ? `&filter_tenant=${encodeURIComponent(filterTenant)}` : '';
+  return request(`/admin/${tenantId}/llm-usage/summary?time_filter=${timeFilter}${ft}`);
 }
 
 export function getLLMUsageLedger(
   tenantId: string,
   timeFilter: string = '24h',
   groupBy: string = 'none',
+  filterTenant?: string,
 ): Promise<LLMUsageRow[]> {
-  return request(`/admin/${tenantId}/llm-usage/ledger?time_filter=${timeFilter}&group_by=${groupBy}`);
+  const ft = filterTenant ? `&filter_tenant=${encodeURIComponent(filterTenant)}` : '';
+  return request(`/admin/${tenantId}/llm-usage/ledger?time_filter=${timeFilter}&group_by=${groupBy}${ft}`);
 }
 
 // --- Runtime Defaults ---

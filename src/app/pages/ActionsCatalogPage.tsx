@@ -1,8 +1,8 @@
 import { Plus, Pencil, Power, PowerOff, Eye, Trash2 } from "lucide-react";
 import { Link } from "react-router";
-import { useState, useEffect } from "react";
-
-const API_BASE = "http://localhost:8000/api/admin/acme/actions";
+import { useState, useEffect, useCallback } from "react";
+import { useTenants } from "../context/TenantContext";
+import { TenantFilter, type TenantFilterValue } from "../components/TenantFilter";
 
 interface ActionItem {
   id: string;
@@ -14,20 +14,29 @@ interface ActionItem {
 }
 
 export default function ActionsCatalogPage() {
+  const { currentTenantId } = useTenants();
+  const [filterTenant, setFilterTenant] = useState<TenantFilterValue>("all");
   const [actions, setActions] = useState<ActionItem[]>([]);
 
-  useEffect(() => {
-    fetch(API_BASE)
+  const fetchActions = useCallback(() => {
+    if (!currentTenantId) return;
+    const qs = filterTenant ? `?filter_tenant=${encodeURIComponent(filterTenant)}` : '';
+    fetch(`/api/admin/${currentTenantId}/actions${qs}`)
       .then((r) => r.json())
       .then(setActions)
       .catch(console.error);
-  }, []);
+  }, [currentTenantId, filterTenant]);
+
+  useEffect(() => {
+    fetchActions();
+  }, [fetchActions]);
 
   const toggleStatus = async (id: string) => {
+    if (!currentTenantId) return;
     const action = actions.find((a) => a.id === id);
     if (!action) return;
     const newStatus = action.status === "active" ? "disabled" : "active";
-    const res = await fetch(`${API_BASE}/${id}`, {
+    const res = await fetch(`/api/admin/${currentTenantId}/actions/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
@@ -39,7 +48,8 @@ export default function ActionsCatalogPage() {
   };
 
   const deleteAction = async (id: string) => {
-    const res = await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
+    if (!currentTenantId) return;
+    const res = await fetch(`/api/admin/${currentTenantId}/actions/${id}`, { method: "DELETE" });
     if (res.ok) {
       setActions(actions.filter((a) => a.id !== id));
     }
@@ -58,6 +68,9 @@ export default function ActionsCatalogPage() {
               Configure actions that the agent can execute after analyzing user
               requests.
             </p>
+            <div className="mt-2">
+              <TenantFilter value={filterTenant} onChange={setFilterTenant} />
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <Link

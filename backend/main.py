@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 
 from bootstrap.demo_setup import seed_demo_data
 from workers.genome_worker import start_genome_worker
-from routers import actions_router, admin_router, agent_router, extractions_router, genomes_router, integrations_router, llm_configs_router, llm_usage_router, runs_router, skills_router, tenants_router, tools_router, uc_runs_router, use_cases_router
+from routers import actions_router, admin_router, agent_router, extractions_router, genomes_router, integrations_router, llm_configs_router, llm_usage_router, managed_integrations_router, runs_router, skills_router, tenants_router, tools_router, uc_runs_router, use_cases_router
 from store import (
     InMemoryActionStore,
     InMemoryAgentUIRunEventStore,
@@ -17,6 +17,7 @@ from store import (
     InMemoryFeedbackStore,
     InMemoryExtractionPayloadStore,
     InMemoryGenomeArtifactStore,
+    InMemoryManagedIntegrationStore,
     InMemoryGenomeStore,
     InMemoryGoogleDriveConfigStore,
     InMemoryIntegrationStore,
@@ -76,6 +77,7 @@ app.state.llm_usage_store = InMemoryLLMUsageStore()
 app.state.genome_store = InMemoryGenomeStore()
 app.state.genome_artifact_store = InMemoryGenomeArtifactStore()
 app.state.extraction_store = InMemoryExtractionPayloadStore()
+app.state.managed_integration_store = InMemoryManagedIntegrationStore()
 app.state.runtime_defaults = {}  # tenant_id -> RuntimeDefaults
 
 app.include_router(tenants_router)
@@ -92,6 +94,7 @@ app.include_router(runs_router)
 app.include_router(uc_runs_router)
 app.include_router(genomes_router)
 app.include_router(extractions_router)
+app.include_router(managed_integrations_router)
 
 _pdf_dir = os.path.join(os.path.dirname(__file__), "generated_pdfs")
 os.makedirs(_pdf_dir, exist_ok=True)

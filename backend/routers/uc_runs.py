@@ -3,8 +3,9 @@
 import json
 import asyncio
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/api/admin/{tenant_id}/uc-runs", tags=["uc-runs"])
@@ -18,10 +19,13 @@ async def _require_tenant(tenant_id: str, request: Request):
 
 
 @router.get("/")
-async def list_all_runs(tenant_id: str, request: Request):
+async def list_all_runs(tenant_id: str, request: Request, filter_tenant: Optional[str] = Query(None)):
     """List all use-case runs for a tenant across all use cases."""
     await _require_tenant(tenant_id, request)
-    runs = await request.app.state.use_case_run_store.list_for_tenant(tenant_id)
+    if filter_tenant is not None:
+        runs = await request.app.state.use_case_run_store.list_filtered(filter_tenant)
+    else:
+        runs = await request.app.state.use_case_run_store.list_for_tenant(tenant_id)
     runs.sort(key=lambda r: r.started_at, reverse=True)
     return [r.model_dump(mode="json") for r in runs]
 

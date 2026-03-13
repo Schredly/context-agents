@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, CheckCircle2, Circle, Loader2, AlertCircle } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { useTenants } from "../context/TenantContext";
 import * as api from "../services/api";
+
+const MULTI_INSTANCE_TYPES = new Set(["github"]);
 
 const ICONS: Record<string, string> = {
   servicenow: "\u{1F527}",
@@ -16,7 +18,7 @@ const ICONS: Record<string, string> = {
 };
 
 export default function IntegrationsPage() {
-  const { currentTenantId } = useTenants();
+  const { currentTenantId, isAllTenants, apiTenantId } = useTenants();
   const [integrations, setIntegrations] = useState<api.IntegrationResponse[]>(
     [],
   );
@@ -27,7 +29,7 @@ export default function IntegrationsPage() {
   const [showAdd, setShowAdd] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!currentTenantId) {
+    if (!apiTenantId) {
       setIntegrations([]);
       setLoading(false);
       return;
@@ -35,8 +37,8 @@ export default function IntegrationsPage() {
     setLoading(true);
     try {
       const [ints, cat] = await Promise.all([
-        api.getIntegrations(currentTenantId),
-        api.getIntegrationCatalog(currentTenantId),
+        api.getIntegrations(apiTenantId, isAllTenants ? "all" : undefined),
+        api.getIntegrationCatalog(apiTenantId),
       ]);
       setIntegrations(ints);
       setCatalog(cat);
@@ -45,24 +47,41 @@ export default function IntegrationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentTenantId]);
+  }, [apiTenantId, isAllTenants]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  const [namePromptType, setNamePromptType] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
   const existingTypes = new Set(integrations.map((i) => i.integration_type));
   const availableTypes = Object.entries(catalog).filter(
-    ([key]) => !existingTypes.has(key),
+    ([key]) => !existingTypes.has(key) || MULTI_INSTANCE_TYPES.has(key),
   );
 
-  const handleAdd = async (integrationType: string) => {
-    if (!currentTenantId) return;
-    try {
-      await api.createIntegration(currentTenantId, integrationType);
+  const handleAddClick = (integrationType: string) => {
+    if (MULTI_INSTANCE_TYPES.has(integrationType)) {
+      setNamePromptType(integrationType);
+      setNameInput("");
       setShowAdd(false);
+      setTimeout(() => nameInputRef.current?.focus(), 50);
+    } else {
+      handleAdd(integrationType);
+    }
+  };
+
+  const handleAdd = async (integrationType: string, name?: string) => {
+    if (!apiTenantId) return;
+    try {
+      await api.createIntegration(apiTenantId, integrationType, name);
+      setShowAdd(false);
+      setNamePromptType(null);
+      setNameInput("");
       await fetchData();
-      toast.success(`${catalog[integrationType]?.name ?? integrationType} added`);
+      toast.success(`${name || catalog[integrationType]?.name || integrationType} added`);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to add integration",
@@ -86,7 +105,7 @@ export default function IntegrationsPage() {
           <div className="relative">
             <button
               onClick={() => setShowAdd(!showAdd)}
-              disabled={!currentTenantId || availableTypes.length === 0}
+              disabled={!apiTenantId || availableTypes.length === 0}
               className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
@@ -97,7 +116,7 @@ export default function IntegrationsPage() {
                 {availableTypes.map(([key, entry]) => (
                   <button
                     key={key}
-                    onClick={() => handleAdd(key)}
+                    onClick={() => handleAddClick(key)}
                     className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors first:rounded-t-lg last:rounded-b-lg flex items-center gap-2"
                   >
                     <span className="text-lg">{ICONS[key] ?? "🔌"}</span>
@@ -109,12 +128,53 @@ export default function IntegrationsPage() {
           </div>
         </div>
 
+        {/* Name Prompt Modal for multi-instance types */}
+        {namePromptType && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-96">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Name this {catalog[namePromptType]?.name ?? namePromptType} integration
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Give it a unique name to distinguish it from other {catalog[namePromptType]?.name ?? namePromptType} integrations.
+              </p>
+              <input
+                ref={nameInputRef}
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && nameInput.trim()) handleAdd(namePromptType, nameInput.trim());
+                  if (e.key === "Escape") { setNamePromptType(null); setNameInput(""); }
+                }}
+                placeholder="e.g. Production, Staging, Client-A"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm mb-4"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => { setNamePromptType(null); setNameInput(""); }}
+                  className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleAdd(namePromptType, nameInput.trim())}
+                  disabled={!nameInput.trim()}
+                  className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center py-16 text-gray-500">
             <Loader2 className="w-5 h-5 animate-spin mr-2" />
             Loading integrations...
           </div>
-        ) : !currentTenantId ? (
+        ) : !apiTenantId ? (
           <div className="flex items-center justify-center py-16 text-gray-500">
             <AlertCircle className="w-5 h-5 mr-2" />
             Select a tenant to view integrations.
@@ -146,9 +206,15 @@ export default function IntegrationsPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-gray-900">
-                        {catalog[integration.integration_type]?.name ??
+                        {integration.name ||
+                          catalog[integration.integration_type]?.name ||
                           integration.integration_type}
                       </h3>
+                      {integration.name && integration.name !== catalog[integration.integration_type]?.name && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {catalog[integration.integration_type]?.name}
+                        </p>
+                      )}
                       <p className="text-xs text-gray-500 mt-0.5">
                         {catalog[integration.integration_type]?.description ??
                           ""}

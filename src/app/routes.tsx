@@ -23,6 +23,7 @@ import GenomesPage from './pages/GenomesPage';
 import GenomeDetailPage from './pages/GenomeDetailPage';
 import GenomeCapturePage from './pages/GenomeCapturePage';
 import GenomeInsightsPage from './pages/GenomeInsightsPage';
+import ToolsPage from './pages/ToolsPage';
 
 export const router = createBrowserRouter([
   {
@@ -52,6 +53,10 @@ export const router = createBrowserRouter([
       {
         path: 'integrations/:id',
         Component: IntegrationConfigPage,
+      },
+      {
+        path: 'tools',
+        Component: ToolsPage,
       },
       {
         path: 'skills',

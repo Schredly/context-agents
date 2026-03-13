@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "../components/StatusBadge";
 import { useTenants } from "../context/TenantContext";
+import { TenantFilter, type TenantFilterValue } from "../components/TenantFilter";
 import { getAllUCRuns, type UseCaseRunResponse } from "../services/api";
 
 type StatusFilter = "all" | "completed" | "running" | "failed";
@@ -16,6 +17,7 @@ type DateFilter = "all" | "today" | "yesterday" | "last7days";
 export default function RunsPage() {
   const navigate = useNavigate();
   const { currentTenantId } = useTenants();
+  const [filterTenant, setFilterTenant] = useState<TenantFilterValue>("all");
   const [runs, setRuns] = useState<UseCaseRunResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -26,14 +28,14 @@ export default function RunsPage() {
     if (!currentTenantId) return;
     setLoading(true);
     try {
-      const data = await getAllUCRuns(currentTenantId);
+      const data = await getAllUCRuns(currentTenantId, filterTenant);
       setRuns(data);
     } catch {
       // ignore
     } finally {
       setLoading(false);
     }
-  }, [currentTenantId]);
+  }, [currentTenantId, filterTenant]);
 
   useEffect(() => {
     fetchRuns();
@@ -116,6 +118,9 @@ export default function RunsPage() {
           <p className="text-sm text-gray-600">
             Execution history of all agent runs across tenants and use cases.
           </p>
+          <div className="mt-2">
+            <TenantFilter value={filterTenant} onChange={setFilterTenant} />
+          </div>
         </div>
 
         {/* Filters */}
