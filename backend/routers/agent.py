@@ -471,6 +471,16 @@ async def approve_github_endpoint(tenant_id: str, body: ApproveGithubRequest, re
 class CommitGithubRequest(BaseModel):
     prompt: str
     payload: str
+    integration_id: str = ""
+
+
+class CreateGithubRepoRequest(BaseModel):
+    repo_name: str
+    org: str
+    visibility: str = "private"
+    integration_id: str
+    prompt: str
+    payload: str
 
 
 @router.post("/commit-github")
@@ -480,6 +490,25 @@ async def commit_github_endpoint(tenant_id: str, body: CommitGithubRequest, requ
     from services.snow_to_github import commit_to_github
     result = await commit_to_github(
         tenant_id=tenant_id,
+        prompt=body.prompt,
+        payload=body.payload,
+        app=request.app,
+        integration_id=body.integration_id,
+    )
+    return result
+
+
+@router.post("/create-github-repo")
+async def create_github_repo_endpoint(tenant_id: str, body: CreateGithubRepoRequest, request: Request):
+    """Create a new GitHub repo and commit catalog files to it."""
+    await _require_tenant(tenant_id, request)
+    from services.snow_to_github import create_and_commit_to_github
+    result = await create_and_commit_to_github(
+        tenant_id=tenant_id,
+        repo_name=body.repo_name,
+        org=body.org,
+        visibility=body.visibility,
+        integration_id=body.integration_id,
         prompt=body.prompt,
         payload=body.payload,
         app=request.app,

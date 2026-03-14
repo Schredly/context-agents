@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GitBranch, X, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { GitBranch, X, ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 
 interface PromptEditorProps {
   initialPrompt: string;
@@ -7,21 +7,32 @@ interface PromptEditorProps {
   draftLabel?: string;
   commitLabel?: string;
   onCommit: (prompt: string, payload: string) => void;
+  onRefine: (currentPrompt: string, payload: string) => void;
   onCancel: () => void;
   disabled?: boolean;
+  refining?: boolean;
 }
 
 export function PromptEditor({
   initialPrompt,
   payload,
-  draftLabel = "ServiceNow \u2192 GitHub Export",
-  commitLabel = "Commit to GitHub",
+  draftLabel = "Review GitHub Export",
+  commitLabel = "Push to GitHub",
   onCommit,
+  onRefine,
   onCancel,
   disabled = false,
+  refining = false,
 }: PromptEditorProps) {
   const [prompt, setPrompt] = useState(initialPrompt);
-  const [payloadExpanded, setPayloadExpanded] = useState(true);
+  const [payloadExpanded, setPayloadExpanded] = useState(false);
+
+  // Sync prompt when parent updates it after refinement
+  const [prevInitial, setPrevInitial] = useState(initialPrompt);
+  if (initialPrompt !== prevInitial) {
+    setPrompt(initialPrompt);
+    setPrevInitial(initialPrompt);
+  }
 
   const prettyPayload = (() => {
     try {
@@ -30,6 +41,8 @@ export function PromptEditor({
       return payload;
     }
   })();
+
+  const busy = disabled || refining;
 
   return (
     <div className="bg-[#102A43] border border-emerald-500/30 rounded-[10px] overflow-hidden">
@@ -44,7 +57,7 @@ export function PromptEditor({
         <button
           type="button"
           onClick={onCancel}
-          disabled={disabled}
+          disabled={busy}
           className="text-[#8FA7B5] hover:text-red-400 transition-colors disabled:opacity-50"
           title="Cancel"
         >
@@ -56,19 +69,19 @@ export function PromptEditor({
         {/* Prompt section — editable */}
         <div>
           <label className="text-[10px] font-medium text-[#8FA7B5] uppercase tracking-wider block mb-2">
-            Prompt
+            Header Prompt (editable)
           </label>
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            disabled={disabled}
-            rows={5}
+            disabled={busy}
+            rows={8}
             className="w-full bg-[#0B1E2D] border border-[#2F5F7A] rounded-lg px-4 py-3 text-sm text-[#F1F5F9] placeholder-[#8FA7B5] focus:outline-none focus:border-emerald-500/50 resize-y disabled:opacity-50 transition-colors leading-relaxed"
-            style={{ minHeight: "100px", maxHeight: "300px" }}
+            style={{ minHeight: "140px", maxHeight: "400px" }}
           />
         </div>
 
-        {/* Payload section — read only */}
+        {/* Payload section — read only, collapsible */}
         <div>
           <button
             type="button"
@@ -80,10 +93,10 @@ export function PromptEditor({
             ) : (
               <ChevronRight className="w-3 h-3" />
             )}
-            Payload (read only)
+            ServiceNow Payload (read only)
           </button>
           {payloadExpanded && (
-            <div className="bg-[#0B1E2D] border border-[#2F5F7A] rounded-lg p-3 overflow-auto max-h-[350px] custom-scrollbar">
+            <div className="bg-[#0B1E2D] border border-[#2F5F7A] rounded-lg p-3 overflow-auto max-h-[350px] custom-scrollbar select-text">
               <pre className="text-xs text-[#8FD6E8] whitespace-pre-wrap font-mono leading-relaxed">
                 {prettyPayload}
               </pre>
@@ -92,27 +105,40 @@ export function PromptEditor({
         </div>
       </div>
 
-      {/* Footer with commit button */}
+      {/* Footer with three buttons */}
       <div className="px-4 py-3 border-t border-[#2F5F7A] flex items-center justify-between">
         <span className="text-xs text-[#8FA7B5]">
-          Edit the prompt above, then commit when ready
+          Edit the prompt above or refine with AI, then push when ready
         </span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onCancel}
-            disabled={disabled}
+            disabled={busy}
             className="px-4 py-2 rounded-lg bg-[#102A43] hover:bg-[#1E4A66] text-[#C7D2DA] border border-[#2F5F7A] transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
           <button
             type="button"
+            onClick={() => onRefine(prompt, payload)}
+            disabled={busy || !prompt.trim()}
+            className="px-4 py-2 rounded-lg bg-[#1E4A66] hover:bg-[#2F5F7A] text-[#C7D2DA] border border-[#2F5F7A] transition-colors flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {refining ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            <span>Refine Prompt</span>
+          </button>
+          <button
+            type="button"
             onClick={() => onCommit(prompt, payload)}
-            disabled={disabled || !prompt.trim()}
+            disabled={busy || !prompt.trim()}
             className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
           >
-            {disabled ? (
+            {disabled && !refining ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <GitBranch className="w-4 h-4" />

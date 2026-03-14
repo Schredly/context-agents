@@ -81,14 +81,14 @@ const FIELD_META: Record<string, Record<string, FieldMeta>> = {
       secret: true,
     },
     org: {
-      label: "Organization / Username",
+      label: "Organization",
       placeholder: "my-org",
-      help: "GitHub organization or personal username that owns the repositories.",
+      help: "GitHub organization that owns the repositories.",
     },
-    repo: {
-      label: "Repository (optional)",
+    default_repository: {
+      label: "Default Repository (optional)",
       placeholder: "my-repo",
-      help: "Scope actions to a specific repository. Leave blank to use all repos in the org.",
+      help: "Default target repository for exports. Leave blank to specify per-export.",
       optional: true,
     },
   },
@@ -108,7 +108,7 @@ const FIELD_META: Record<string, Record<string, FieldMeta>> = {
   },
   replit: {
     connect_sid: { label: "Session Cookie (connect.sid)", placeholder: "s%3A...", help: "Sign in to replit.com, open DevTools (F12) → Application → Cookies → replit.com → copy the value of connect.sid.", secret: true },
-    username: { label: "Username", placeholder: "your-username", help: "Your Replit username (optional — auto-detected on Test Connection).", optional: true },
+    username: { label: "Username", placeholder: "your-username", help: "Your Replit username (optional — auto-detected on Test Integration).", optional: true },
   },
 };
 
@@ -247,18 +247,26 @@ export default function IntegrationConfigPage() {
     }
   };
 
-  /* Test connection */
+  /* Strip redacted values so we never overwrite real secrets with masked strings */
+  const buildConfigToSave = () => {
+    const config: Record<string, string> = {};
+    for (const [key, value] of Object.entries(formData)) {
+      if (typeof value === "string" && value.includes("••••")) continue;
+      config[key] = value as string;
+    }
+    if (isGoogleDrive && googleAccessToken) {
+      config.access_token = googleAccessToken;
+    }
+    return config;
+  };
+
+  /* Test integration */
   const testConnection = async () => {
     if (!effectiveTenantId || !id) return;
     setConnectionStatus("testing");
     setConnectionDetail(null);
     try {
-      // For Google Drive, include the access_token in the saved config so the backend can test
-      const configToSave = { ...formData };
-      if (isGoogleDrive && googleAccessToken) {
-        configToSave.access_token = googleAccessToken;
-      }
-      await api.updateIntegrationConfig(effectiveTenantId, id, configToSave);
+      await api.updateIntegrationConfig(effectiveTenantId, id, buildConfigToSave());
       const result = await api.testIntegration(effectiveTenantId, id);
       setConnectionStatus(result.ok ? "success" : "error");
       if (result.folder_name) {
@@ -276,11 +284,7 @@ export default function IntegrationConfigPage() {
     if (!effectiveTenantId || !id) return;
     setSaving(true);
     try {
-      const configToSave = { ...formData };
-      if (isGoogleDrive && googleAccessToken) {
-        configToSave.access_token = googleAccessToken;
-      }
-      await api.updateIntegrationConfig(effectiveTenantId, id, configToSave);
+      await api.updateIntegrationConfig(effectiveTenantId, id, buildConfigToSave());
       await api.enableIntegration(effectiveTenantId, id);
       toast.success(`${integrationName} enabled`);
       navigate("/integrations");
@@ -296,11 +300,7 @@ export default function IntegrationConfigPage() {
     if (!effectiveTenantId || !id) return;
     setSaving(true);
     try {
-      const configToSave = { ...formData };
-      if (isGoogleDrive && googleAccessToken) {
-        configToSave.access_token = googleAccessToken;
-      }
-      await api.updateIntegrationConfig(effectiveTenantId, id, configToSave);
+      await api.updateIntegrationConfig(effectiveTenantId, id, buildConfigToSave());
       toast.success("Configuration saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save");
@@ -525,7 +525,7 @@ export default function IntegrationConfigPage() {
                 disabled={!canTest}
                 className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Test Connection
+                Test Integration
               </button>
               <button
                 onClick={handleSave}

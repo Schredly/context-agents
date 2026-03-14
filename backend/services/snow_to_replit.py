@@ -529,7 +529,7 @@ async def convert_catalog_by_title_to_replit(tenant_id: str, payload: dict, app)
     # 2. Build URL from integration endpoint (fallback to config instance_url)
     encoded_title = catalog_title.replace(" ", "%20")
     service_url = await servicenow_tools.get_endpoint_url(
-        tenant_id, "Catalog by Title", app, catalogTitle=encoded_title
+        tenant_id, "Catalog By Title", app, catalogTitle=encoded_title
     )
     if not service_url:
         # Fallback: build from instance_url in config

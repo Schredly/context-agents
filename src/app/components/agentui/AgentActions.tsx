@@ -39,6 +39,7 @@ interface DraftReadyPayload {
   action_id: string;
   approve_label?: string;
   draft_label?: string;
+  reasoning?: string[];
   target?: string;
 }
 
@@ -46,6 +47,7 @@ interface NeedsInputPayload {
   action_id: string;
   field: string;
   prompt: string;
+  reasoning?: string[];
 }
 
 interface AgentActionsProps {
@@ -367,6 +369,7 @@ export function AgentActions({
           action_id: action.id,
           field: data.field || "input",
           prompt: data.prompt || "Please provide the required input:",
+          reasoning: Array.isArray(data.reasoning) ? data.reasoning : undefined,
         });
         setExecutingId(null);
         return;
@@ -382,6 +385,7 @@ export function AgentActions({
           approve_label: data.approve_label || undefined,
           draft_label: data.draft_label || undefined,
           target: data.target || undefined,
+          reasoning: Array.isArray(data.reasoning) ? data.reasoning : undefined,
         });
         setRefiningIds((prev) => new Set(prev).add(action.id));
         setExecutingId(null);

@@ -6,6 +6,15 @@ from fastapi import APIRouter, HTTPException, Request
 from models import CreateManagedIntegrationRequest, ManagedIntegration
 from services.integration_executor import test_managed_integration
 
+
+def _redact(integration: ManagedIntegration) -> dict:
+    """Serialize a ManagedIntegration with the token masked."""
+    data = integration.model_dump(mode="json")
+    token = data.get("token", "")
+    if isinstance(token, str) and token:
+        data["token"] = token[:4] + "••••" + token[-4:] if len(token) > 8 else "••••••••"
+    return data
+
 router = APIRouter(
     prefix="/api/admin/{tenant_id}/managed-integrations",
     tags=["managed-integrations"],
@@ -42,14 +51,14 @@ async def create_managed_integration(
         test_endpoint=body.test_endpoint,
     )
     created = await request.app.state.managed_integration_store.create(integration)
-    return created.model_dump(mode="json")
+    return _redact(created)
 
 
 @router.get("/")
 async def list_managed_integrations(tenant_id: str, request: Request):
     await _require_tenant(tenant_id, request)
     items = await request.app.state.managed_integration_store.list_for_tenant(tenant_id)
-    return [i.model_dump(mode="json") for i in items]
+    return [_redact(i) for i in items]
 
 
 @router.get("/{integration_id}")
@@ -58,7 +67,7 @@ async def get_managed_integration(tenant_id: str, integration_id: str, request: 
     integration = await request.app.state.managed_integration_store.get(integration_id)
     if integration is None or integration.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Managed integration not found")
-    return integration.model_dump(mode="json")
+    return _redact(integration)
 
 
 @router.put("/{integration_id}")
@@ -82,7 +91,7 @@ async def update_managed_integration(
         test_endpoint=body.test_endpoint,
         updated_at=datetime.now(timezone.utc),
     )
-    return updated.model_dump(mode="json")
+    return _redact(updated)
 
 
 @router.delete("/{integration_id}")

@@ -407,7 +407,7 @@ INTEGRATION_CATALOG = {
             {"name": "Create Incident", "path": "/api/now/table/incident", "method": "POST", "description": "Create a new incident"},
             {"name": "Knowledge Base", "path": "/api/now/table/kb_knowledge", "method": "GET", "description": "Search knowledge articles"},
             {"name": "List Catalogs", "path": "/api/1939459/catalogtitleservice", "method": "GET", "description": "List all available ServiceNow catalogs"},
-            {"name": "Catalog by Title", "path": "/api/1939459/catalogbytitleservic/catalog/{catalogTitle}", "method": "GET", "description": "Fetch a catalog by its title"},
+            {"name": "Catalog By Title", "path": "/api/1939459/catalogbytitleservic/catalog/{catalogTitle}", "method": "GET", "description": "Fetch a catalog by its title"},
             {"name": "Catalog by URL", "path": "/api/1939459/catalogunderstandingservice/loveboat/{sys_id}", "method": "GET", "description": "Fetch a specific catalog by sys_id"},
         ],
     },
@@ -436,7 +436,7 @@ INTEGRATION_CATALOG = {
     "github": {
         "name": "GitHub",
         "description": "Code repository and collaboration",
-        "config_fields": ["token", "org", "repo"],
+        "config_fields": ["token", "org", "default_repository"],
         "default_endpoints": [
             {"name": "List Repos", "path": "/orgs/{org}/repos", "method": "GET", "description": "List repositories in the organization"},
             {"name": "Create Repo", "path": "/orgs/{org}/repos", "method": "POST", "description": "Create a new repository"},

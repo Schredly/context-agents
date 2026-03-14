@@ -36,6 +36,22 @@ interface InputCollectionState {
   prompt: string;
 }
 
+interface PendingGithubCommit {
+  prompt: string;
+  payload: string;
+  options: { id: string; name: string; org: string }[];
+}
+
+interface PendingNewRepo {
+  prompt: string;
+  payload: string;
+  integrations: { id: string; name: string; org: string }[];
+  step: "pick_integration" | "repo_name" | "organization" | "visibility";
+  integrationId: string;
+  repoName: string;
+  organization: string;
+}
+
 export default function AgentUIPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -73,11 +89,20 @@ export default function AgentUIPage() {
 
   // Input collection mode (action needs user input before executing)
   const [inputState, setInputState] = useState<InputCollectionState | null>(null);
+  const [pendingGithubCommit, setPendingGithubCommit] = useState<PendingGithubCommit | null>(null);
+  const [pendingNewRepo, setPendingNewRepo] = useState<PendingNewRepo | null>(null);
+  const [refiningPrompt, setRefiningPrompt] = useState(false);
 
   const cancelRef = useRef<(() => void) | null>(null);
   const reasoningCountRef = useRef(0);
   const skillCountRef = useRef(0);
   const toolCountRef = useRef(0);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Keep ref in sync so handleApprove always reads the latest draft
   useEffect(() => {
@@ -90,6 +115,23 @@ export default function AgentUIPage() {
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  const appendReasoningFromResponse = (data: Record<string, unknown>) => {
+    if (Array.isArray(data.reasoning) && data.reasoning.length > 0) {
+      const icons = ["target", "search", "check", "zap", "file", "git-commit"];
+      setReasoningSteps((prev) => {
+        const offset = prev.length;
+        const newSteps: ReasoningStep[] = (data.reasoning as string[]).map((msg, i) => ({
+          id: `ar${offset + i}`,
+          label: msg,
+          description: "",
+          status: "completed" as const,
+          icon: icons[(offset + i) % icons.length] || "zap",
+        }));
+        return [...prev, ...newSteps];
+      });
+    }
+  };
 
   const handleSendMessage = async (content: string) => {
     const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -136,6 +178,8 @@ export default function AgentUIPage() {
         }
 
         if (data.status === "draft" && data.draft_prompt) {
+          // Populate reasoning steps from the action response
+          appendReasoningFromResponse(data);
           // Transition to draft mode
           setInputState(null);
           setDraftState({
@@ -195,6 +239,193 @@ export default function AgentUIPage() {
       clearLoadingTimers();
       setIsLoading(false);
       return;
+    }
+
+    // --- GitHub target selection: user chose which integration to use ---
+    if (pendingGithubCommit) {
+      const userMsg: Message = { id: Date.now().toString(), type: "user", content, timestamp: now };
+      setMessages((prev) => [...prev, userMsg]);
+      const pick = parseInt(content.trim(), 10);
+      const { prompt: ghPrompt, payload: ghPayload, options } = pendingGithubCommit;
+      setPendingGithubCommit(null);
+
+      if (isNaN(pick) || pick < 1 || pick > options.length + 1) {
+        const errMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          type: "agent-result",
+          content: "",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          result: `Invalid selection "${content.trim()}". Please try pushing to GitHub again.`,
+        };
+        setMessages((prev) => [...prev, errMsg]);
+        return;
+      }
+
+      if (pick === options.length + 1) {
+        // "Create new repository" — start multi-step collection
+        if (options.length === 1) {
+          // Single integration — auto-select it for auth, skip to repo_name
+          const askName: Message = {
+            id: (Date.now() + 1).toString(),
+            type: "agent-question",
+            content: "",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            result: `Using "${options[0].name}" for authentication.\n\nWhat should the new repository be named? (e.g. servicenow-catalog-export)`,
+          };
+          setMessages((prev) => [...prev, askName]);
+          setPendingNewRepo({
+            prompt: ghPrompt, payload: ghPayload, integrations: options,
+            step: "repo_name", integrationId: options[0].id, repoName: "", organization: "",
+          });
+        } else {
+          // Multiple integrations — ask which PAT to use
+          const lines = options.map((o, i) => `${i + 1}. ${o.name} — org: ${o.org || "none"}`);
+          const askAuth: Message = {
+            id: (Date.now() + 1).toString(),
+            type: "agent-question",
+            content: "",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            result: `Which integration's access token should be used?\n\n${lines.join("\n")}\n\nReply with the number.`,
+          };
+          setMessages((prev) => [...prev, askAuth]);
+          setPendingNewRepo({
+            prompt: ghPrompt, payload: ghPayload, integrations: options,
+            step: "pick_integration", integrationId: "", repoName: "", organization: "",
+          });
+        }
+        return;
+      }
+
+      const selectedIntegration = options[pick - 1];
+      handleCommitToGithub(ghPrompt, ghPayload, selectedIntegration.id);
+      return;
+    }
+
+    // --- Create new repo: multi-step input collection ---
+    if (pendingNewRepo) {
+      const userMsg: Message = { id: Date.now().toString(), type: "user", content, timestamp: now };
+      setMessages((prev) => [...prev, userMsg]);
+      const val = content.trim();
+
+      if (pendingNewRepo.step === "pick_integration") {
+        const idx = parseInt(val, 10) - 1;
+        if (isNaN(idx) || idx < 0 || idx >= pendingNewRepo.integrations.length) {
+          const err: Message = {
+            id: (Date.now() + 1).toString(), type: "agent-result", content: "",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            result: `Invalid selection. Enter 1–${pendingNewRepo.integrations.length}.`,
+          };
+          setMessages((prev) => [...prev, err]);
+          return;
+        }
+        const picked = pendingNewRepo.integrations[idx];
+        const askName: Message = {
+          id: (Date.now() + 1).toString(), type: "agent-question", content: "",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          result: `Using "${picked.name}" for authentication.\n\nWhat should the new repository be named? (e.g. servicenow-catalog-export)`,
+        };
+        setMessages((prev) => [...prev, askName]);
+        setPendingNewRepo({ ...pendingNewRepo, step: "repo_name", integrationId: picked.id });
+        return;
+      }
+
+      if (pendingNewRepo.step === "repo_name") {
+        if (!val) {
+          const err: Message = {
+            id: (Date.now() + 1).toString(), type: "agent-result", content: "",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            result: "Repository name cannot be empty.",
+          };
+          setMessages((prev) => [...prev, err]);
+          return;
+        }
+        const askOrg: Message = {
+          id: (Date.now() + 1).toString(), type: "agent-question", content: "",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          result: "What GitHub organization should own this repository? (e.g. acme-corp)",
+        };
+        setMessages((prev) => [...prev, askOrg]);
+        setPendingNewRepo({ ...pendingNewRepo, step: "organization", repoName: val });
+        return;
+      }
+
+      if (pendingNewRepo.step === "organization") {
+        if (!val) {
+          const err: Message = {
+            id: (Date.now() + 1).toString(), type: "agent-result", content: "",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            result: "Organization cannot be empty.",
+          };
+          setMessages((prev) => [...prev, err]);
+          return;
+        }
+        const askVis: Message = {
+          id: (Date.now() + 1).toString(), type: "agent-question", content: "",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          result: "Should the repository be private or public?\n\n1. Private\n2. Public\n\nReply with 1 or 2.",
+        };
+        setMessages((prev) => [...prev, askVis]);
+        setPendingNewRepo({ ...pendingNewRepo, step: "visibility", organization: val });
+        return;
+      }
+
+      if (pendingNewRepo.step === "visibility") {
+        let visibility = "private";
+        if (val === "2" || val.toLowerCase() === "public") {
+          visibility = "public";
+        } else if (val !== "1" && val.toLowerCase() !== "private") {
+          const err: Message = {
+            id: (Date.now() + 1).toString(), type: "agent-result", content: "",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            result: "Please reply with 1 (Private) or 2 (Public).",
+          };
+          setMessages((prev) => [...prev, err]);
+          return;
+        }
+
+        // All fields collected — call backend
+        const { prompt: repoPrompt, payload: repoPayload, integrationId, repoName, organization } = pendingNewRepo;
+        setPendingNewRepo(null);
+        setIsLoading(true);
+
+        try {
+          const res = await fetch("/api/admin/acme/agent/create-github-repo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              repo_name: repoName,
+              org: organization,
+              visibility,
+              integration_id: integrationId,
+              prompt: repoPrompt,
+              payload: repoPayload,
+            }),
+          });
+          const data = await res.json();
+          appendReasoningFromResponse(data);
+          const resultMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            type: "agent-result",
+            content: "",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            result: data.status === "ok"
+              ? `${data.message}\n\nRepository: ${data.repo_url}`
+              : data.message || "Failed to create repository.",
+          };
+          setMessages((prev) => [...prev, resultMsg]);
+        } catch (err) {
+          const errText = err instanceof Error ? err.message : "Network error";
+          const errMsg: Message = {
+            id: (Date.now() + 1).toString(), type: "agent-result", content: "",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            result: `Create repo failed: ${errText}`,
+          };
+          setMessages((prev) => [...prev, errMsg]);
+        }
+        setDraftState(null);
+        setIsLoading(false);
+        return;
+      }
     }
 
     // --- Refinement mode: call refine-prompt instead of streamAgent (non-GitHub drafts only) ---
@@ -404,7 +635,10 @@ export default function AgentUIPage() {
     cancelRef.current = cancel;
   };
 
-  const handleDraftReady = (result: { draft_prompt: string; catalog_data: string; action_id: string; approve_label?: string; draft_label?: string; target?: string }) => {
+  const handleDraftReady = (result: { draft_prompt: string; catalog_data: string; action_id: string; approve_label?: string; draft_label?: string; target?: string; reasoning?: string[] }) => {
+    if (result.reasoning) {
+      appendReasoningFromResponse({ reasoning: result.reasoning });
+    }
     setDraftState({
       actionId: result.action_id,
       draftPrompt: result.draft_prompt,
@@ -480,23 +714,77 @@ export default function AgentUIPage() {
     setIsLoading(false);
   };
 
-  const handleCommitToGithub = async (prompt: string, payload: string) => {
+  const handleCommitToGithub = async (prompt: string, payload: string, integrationId?: string) => {
     setIsLoading(true);
     try {
+      const body: Record<string, string> = { prompt, payload };
+      if (integrationId) body.integration_id = integrationId;
+
       const res = await fetch("/api/admin/acme/agent/commit-github", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, payload }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
-      const successMsg: Message = {
-        id: Date.now().toString(),
-        type: "agent-result",
-        content: "",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        result: data.message || "Committed to GitHub successfully!",
-      };
-      setMessages((prev) => [...prev, successMsg]);
+
+      // Append reasoning from any response type
+      appendReasoningFromResponse(data);
+
+      // Backend returned needs_input — user must pick a GitHub integration
+      if (data.status === "needs_input" && data.field === "github_target") {
+        const options = data.options || [];
+        // Auto-select when there's only 1 integration
+        if (options.length === 1) {
+          const autoMsg: Message = {
+            id: Date.now().toString(),
+            type: "agent-result",
+            content: "",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            result: `Auto-selected GitHub integration: ${options[0].name}`,
+          };
+          setMessages((prev) => [...prev, autoMsg]);
+          setDraftState(null);
+          // Re-call with the selected integration
+          await handleCommitToGithub(prompt, payload, options[0].id);
+          return;
+        }
+        const pickMsg: Message = {
+          id: Date.now().toString(),
+          type: "agent-question",
+          content: "",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          result: data.prompt,
+        };
+        setMessages((prev) => [...prev, pickMsg]);
+        setPendingGithubCommit({ prompt, payload, options });
+        setDraftState(null);
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.status === "error") {
+        const errMsg: Message = {
+          id: Date.now().toString(),
+          type: "agent-result",
+          content: "",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          result: data.message || "GitHub commit failed.",
+        };
+        setMessages((prev) => [...prev, errMsg]);
+      } else {
+        const fileList = Array.isArray(data.files_pushed)
+          ? "\n\nFiles committed:\n" + data.files_pushed.map((f: string) => `  • ${f}`).join("\n")
+          : "";
+        const repoLink = data.repo_url ? `\n\nRepository: ${data.repo_url}` : "";
+        const successMsg: Message = {
+          id: Date.now().toString(),
+          type: "agent-result",
+          content: "",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          result: (data.message || "Committed to GitHub successfully!") + fileList + repoLink,
+        };
+        setMessages((prev) => [...prev, successMsg]);
+      }
     } catch (err) {
       const errText = err instanceof Error ? err.message : "Network error";
       const errMsg: Message = {
@@ -512,6 +800,32 @@ export default function AgentUIPage() {
     setIsLoading(false);
   };
 
+  const handleRefineGithubPrompt = async (currentPrompt: string, catalogData: string) => {
+    setRefiningPrompt(true);
+    try {
+      const res = await fetch("/api/admin/acme/agent/refine-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          current_prompt: currentPrompt,
+          user_feedback: "Improve this prompt. Make it clearer and more specific based on the catalog data.",
+          catalog_data: catalogData,
+        }),
+      });
+      const data = await res.json();
+      if (data.refined_prompt) {
+        setDraftState((prev) => {
+          const updated = prev ? { ...prev, draftPrompt: data.refined_prompt } : null;
+          draftStateRef.current = updated;
+          return updated;
+        });
+      }
+    } catch {
+      // silently keep current prompt on failure
+    }
+    setRefiningPrompt(false);
+  };
+
   const handleCancelRefine = () => {
     setDraftState(null);
     const cancelMsg: Message = {
@@ -524,7 +838,10 @@ export default function AgentUIPage() {
     setMessages((prev) => [...prev, cancelMsg]);
   };
 
-  const handleNeedsInput = (result: { action_id: string; field: string; prompt: string }) => {
+  const handleNeedsInput = (result: { action_id: string; field: string; prompt: string; reasoning?: string[] }) => {
+    if (result.reasoning) {
+      appendReasoningFromResponse({ reasoning: result.reasoning });
+    }
     setInputState({
       actionId: result.action_id,
       field: result.field,
@@ -678,7 +995,7 @@ export default function AgentUIPage() {
                         <span className="text-xs font-medium text-[#2E86AB] uppercase tracking-wider">Agent</span>
                         <span className="text-xs text-[#8FA7B5] ml-auto">{message.timestamp}</span>
                       </div>
-                      <p className="text-sm text-[#F1F5F9]">{message.content}</p>
+                      <pre className="text-sm text-[#F1F5F9] whitespace-pre-wrap font-sans">{message.result || message.content}</pre>
                     </div>
                   );
                 }
@@ -728,10 +1045,12 @@ export default function AgentUIPage() {
                   initialPrompt={draftState.draftPrompt}
                   payload={draftState.catalogData}
                   draftLabel={draftState.draftLabel}
-                  commitLabel={draftState.approveLabel || "Commit to GitHub"}
+                  commitLabel={draftState.approveLabel || "Push to GitHub"}
                   onCommit={handleCommitToGithub}
+                  onRefine={handleRefineGithubPrompt}
                   onCancel={handleCancelRefine}
                   disabled={isLoading}
+                  refining={refiningPrompt}
                 />
               )}
 
@@ -741,6 +1060,7 @@ export default function AgentUIPage() {
                   <span className="text-sm">{loadingStatus}</span>
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
           </div>
 
@@ -749,10 +1069,17 @@ export default function AgentUIPage() {
             <InputPanel
               onSend={handleSendMessage}
               disabled={isLoading}
-              mode={draftState ? "refine" : inputState ? "input" : "normal"}
+              mode={draftState ? "refine" : (inputState || pendingGithubCommit || pendingNewRepo) ? "input" : "normal"}
               onApprove={draftState ? handleApprove : undefined}
               onCancelRefine={draftState ? handleCancelRefine : undefined}
-              inputPrompt={inputState?.prompt}
+              inputPrompt={
+                inputState?.prompt
+                || (pendingGithubCommit ? "Enter the number of the GitHub integration to use" : undefined)
+                || (pendingNewRepo?.step === "pick_integration" ? "Select an integration by number" : undefined)
+                || (pendingNewRepo?.step === "repo_name" ? "Enter a repository name" : undefined)
+                || (pendingNewRepo?.step === "organization" ? "Enter the GitHub organization" : undefined)
+                || (pendingNewRepo?.step === "visibility" ? "Enter 1 (Private) or 2 (Public)" : undefined)
+              }
               approveLabel={draftState?.approveLabel}
             />
           )}

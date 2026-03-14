@@ -76,7 +76,7 @@ async def seed_demo_data(app) -> None:
             IntegrationEndpoint(id="ep_catbyurl", name="Catalog by URL",
                 path="/api/1939459/catalogunderstandingservice/loveboat/{sys_id}",
                 method="GET", description="Fetch a specific catalog by direct URL with sys_id"),
-            IntegrationEndpoint(id="ep_catbytitle", name="Catalog by Title",
+            IntegrationEndpoint(id="ep_catbytitle", name="Catalog By Title",
                 path="/api/1939459/catalogbytitleservic/catalog/{catalogTitle}",
                 method="GET", description="Fetch a catalog by its title (URL-encoded)"),
             IntegrationEndpoint(id="ep_catlist", name="List Catalogs",

@@ -37,11 +37,28 @@ def _connection_status(integration: Integration, snow_cfg, drive_cfg, replit_cfg
     return "not-connected"
 
 
+SECRET_CONFIG_KEYS = {"token", "password", "api_token", "access_token", "connect_sid"}
+
+
+def _redact_config(config: dict) -> dict:
+    """Return a copy of config with secret values masked."""
+    redacted = {}
+    for key, value in config.items():
+        if key in SECRET_CONFIG_KEYS and isinstance(value, str) and value:
+            redacted[key] = value[:4] + "••••" + value[-4:] if len(value) > 8 else "••••••••"
+        else:
+            redacted[key] = value
+    return redacted
+
+
 def _serialize(integration: Integration, connection_status: str, catalog: dict | None = None) -> dict:
     data = integration.model_dump()
     data["connection_status"] = connection_status
     data["created_at"] = integration.created_at.isoformat()
     data["updated_at"] = integration.updated_at.isoformat()
+    # Never expose raw tokens in API responses
+    if data.get("config"):
+        data["config"] = _redact_config(data["config"])
     # Ensure name is populated (backfill for old records without name)
     if not data.get("name") and catalog:
         entry = catalog.get(integration.integration_type)
@@ -201,11 +218,14 @@ async def update_config(
     if integration is None or integration.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Integration not found")
 
-    updated = await store.update(integration_id, config=body.config)
+    # Merge incoming config with existing — omitted keys are preserved (allows
+    # the frontend to skip redacted secrets that the user didn't change).
+    merged_config = {**integration.config, **body.config}
+    updated = await store.update(integration_id, config=merged_config)
 
     # Sync to existing config stores
     if integration.integration_type == "servicenow":
-        cfg = body.config
+        cfg = merged_config
         if cfg.get("instance_url") and cfg.get("username") and cfg.get("password"):
             await request.app.state.snow_config_store.upsert(
                 tenant_id,
@@ -214,18 +234,16 @@ async def update_config(
                 password=cfg["password"],
             )
     elif integration.integration_type == "google-drive":
-        cfg = body.config
-        if cfg.get("root_folder_id"):
+        if merged_config.get("root_folder_id"):
             await request.app.state.drive_config_store.upsert(
                 tenant_id,
-                root_folder_id=cfg["root_folder_id"],
-                client_id=cfg.get("client_id"),
+                root_folder_id=merged_config["root_folder_id"],
+                client_id=merged_config.get("client_id"),
             )
     elif integration.integration_type == "replit":
-        cfg = body.config
-        if cfg.get("connect_sid"):
+        if merged_config.get("connect_sid"):
             await request.app.state.replit_config_store.upsert(
-                tenant_id, connect_sid=cfg["connect_sid"], username=cfg.get("username", ""))
+                tenant_id, connect_sid=merged_config["connect_sid"], username=merged_config.get("username", ""))
 
     snow_cfg = await request.app.state.snow_config_store.get_by_tenant(tenant_id)
     drive_cfg = await request.app.state.drive_config_store.get_by_tenant(tenant_id)
@@ -358,7 +376,7 @@ async def test_integration(tenant_id: str, integration_id: str, request: Request
         if not token:
             return {"ok": False, "detail": "Missing Personal Access Token"}
         if not org:
-            return {"ok": False, "detail": "Missing Organization / Username"}
+            return {"ok": False, "detail": "Missing Organization"}
         try:
             headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -517,7 +535,7 @@ def _build_endpoint_request(
     elif itype == "github":
         headers["Authorization"] = f"Bearer {cfg.get('token', '')}"
         headers.setdefault("Accept", "application/vnd.github+json")
-        url = url.replace("{org}", cfg.get("org", "")).replace("{repo}", cfg.get("repo", "")).replace("{path}", "")
+        url = url.replace("{org}", cfg.get("org", "")).replace("{repo}", cfg.get("default_repository") or cfg.get("repo", "")).replace("{path}", "")
         params["per_page"] = str(limit)
 
     # Substitute user-supplied path variables (e.g. {sys_id}, {title})

@@ -3,6 +3,7 @@ import { Plus, CheckCircle2, Circle, Loader2, AlertCircle } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { useTenants } from "../context/TenantContext";
+import { TenantFilter, type TenantFilterValue } from "../components/TenantFilter";
 import * as api from "../services/api";
 
 const MULTI_INSTANCE_TYPES = new Set(["github"]);
@@ -18,7 +19,8 @@ const ICONS: Record<string, string> = {
 };
 
 export default function IntegrationsPage() {
-  const { currentTenantId, isAllTenants, apiTenantId } = useTenants();
+  const { currentTenantId } = useTenants();
+  const [filterTenant, setFilterTenant] = useState<TenantFilterValue>("all");
   const [integrations, setIntegrations] = useState<api.IntegrationResponse[]>(
     [],
   );
@@ -29,7 +31,7 @@ export default function IntegrationsPage() {
   const [showAdd, setShowAdd] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!apiTenantId) {
+    if (!currentTenantId) {
       setIntegrations([]);
       setLoading(false);
       return;
@@ -37,8 +39,8 @@ export default function IntegrationsPage() {
     setLoading(true);
     try {
       const [ints, cat] = await Promise.all([
-        api.getIntegrations(apiTenantId, isAllTenants ? "all" : undefined),
-        api.getIntegrationCatalog(apiTenantId),
+        api.getIntegrations(currentTenantId, filterTenant),
+        api.getIntegrationCatalog(currentTenantId),
       ]);
       setIntegrations(ints);
       setCatalog(cat);
@@ -47,7 +49,7 @@ export default function IntegrationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [apiTenantId, isAllTenants]);
+  }, [currentTenantId, filterTenant]);
 
   useEffect(() => {
     fetchData();
@@ -74,9 +76,9 @@ export default function IntegrationsPage() {
   };
 
   const handleAdd = async (integrationType: string, name?: string) => {
-    if (!apiTenantId) return;
+    if (!currentTenantId) return;
     try {
-      await api.createIntegration(apiTenantId, integrationType, name);
+      await api.createIntegration(currentTenantId, integrationType, name);
       setShowAdd(false);
       setNamePromptType(null);
       setNameInput("");
@@ -101,11 +103,14 @@ export default function IntegrationsPage() {
             <p className="text-sm text-gray-600">
               Connect external systems for this tenant.
             </p>
+            <div className="mt-2">
+              <TenantFilter value={filterTenant} onChange={setFilterTenant} />
+            </div>
           </div>
           <div className="relative">
             <button
               onClick={() => setShowAdd(!showAdd)}
-              disabled={!apiTenantId || availableTypes.length === 0}
+              disabled={!currentTenantId || availableTypes.length === 0}
               className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
@@ -174,7 +179,7 @@ export default function IntegrationsPage() {
             <Loader2 className="w-5 h-5 animate-spin mr-2" />
             Loading integrations...
           </div>
-        ) : !apiTenantId ? (
+        ) : !currentTenantId ? (
           <div className="flex items-center justify-center py-16 text-gray-500">
             <AlertCircle className="w-5 h-5 mr-2" />
             Select a tenant to view integrations.
