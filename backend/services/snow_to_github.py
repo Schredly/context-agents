@@ -18,6 +18,7 @@ import time
 
 from services import servicenow_tools
 from services.snow_to_replit import _fetch_catalog
+from adapters.servicenow_catalog_adapter import create_servicenow_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,15 @@ async def convert_catalog_to_github(tenant_id: str, payload: dict, app) -> dict:
     except Exception:
         return {"status": "error", "error": "Non-JSON response from ServiceNow (instance may be hibernating)"}
 
+    # Feed raw catalog into the genome extraction pipeline
+    try:
+        extraction_id = await create_servicenow_extraction(tenant_id, catalog_name, catalog_json, app)
+        print(f"[snow_to_github] Genome extraction created: {extraction_id}")
+        reasoning.append(f"Genome extraction initiated: {extraction_id}")
+    except Exception as exc:
+        print(f"[snow_to_github] Genome extraction failed (non-blocking): {exc}")
+        extraction_id = None
+
     # Store the raw payload unmodified
     catalog_payload = json.dumps(catalog_json, indent=2)
     reasoning.append(f"Generating GitHub export structure — {len(catalog_payload):,} chars retrieved")
@@ -281,7 +291,7 @@ async def convert_catalog_to_github(tenant_id: str, payload: dict, app) -> dict:
         "Create a clean representation of the catalog that could later be used to rebuild or migrate the application."
     )
 
-    return {
+    result = {
         "status": "draft",
         "draft_prompt": draft_prompt,
         "catalog_data": catalog_payload,
@@ -293,6 +303,9 @@ async def convert_catalog_to_github(tenant_id: str, payload: dict, app) -> dict:
         "analysis": f"Fetched catalog \"{catalog_name}\" ({len(catalog_payload):,} chars)",
         "latency_ms": latency_ms,
     }
+    if extraction_id:
+        result["extraction_id"] = extraction_id
+    return result
 
 
 def _extract_items(catalog_data: dict | list) -> list[dict]:
