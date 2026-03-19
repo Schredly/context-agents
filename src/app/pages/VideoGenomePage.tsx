@@ -104,12 +104,18 @@ export default function VideoGenomePage() {
       if (!vid) {
         const formData = new FormData();
         formData.append("file", videoFile);
-        const uploadRes = await fetch("/api/video-genome/upload", {
-          method: "POST",
-          body: formData,
-        });
+        let uploadRes: Response;
+        try {
+          uploadRes = await fetch("/api/video-genome/upload", {
+            method: "POST",
+            body: formData,
+          });
+        } catch {
+          throw new Error("Cannot reach backend server. Make sure the backend is running (uvicorn main:app --port 8000).");
+        }
         if (!uploadRes.ok) {
-          throw new Error(`Upload failed (${uploadRes.status})`);
+          const text = await uploadRes.text().catch(() => "");
+          throw new Error(`Upload failed (${uploadRes.status}): ${text.slice(0, 200)}`);
         }
         const uploadData = await uploadRes.json();
         if (uploadData.status !== "ok") {
@@ -119,13 +125,18 @@ export default function VideoGenomePage() {
         setVideoId(vid);
       }
 
-      // Now extract
-      setExtractStatus("Extracting frames and analyzing with AI...");
-      const res = await fetch("/api/video-genome/extract", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ video_id: vid, user_notes: userNotes }),
-      });
+      // Now extract — this can take a while (frame extraction + LLM vision call)
+      setExtractStatus("Processing — extracting frames and analyzing with AI...");
+      let res: Response;
+      try {
+        res = await fetch("/api/video-genome/extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ video_id: vid, user_notes: userNotes }),
+        });
+      } catch {
+        throw new Error("Cannot reach backend server. The extraction request may have timed out — try a shorter video or check the backend logs.");
+      }
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         throw new Error(`Extraction failed (${res.status}): ${text.slice(0, 300)}`);
@@ -355,10 +366,21 @@ export default function VideoGenomePage() {
                 </div>
               </div>
 
-              <button onClick={runExtraction} disabled={extracting || refining}
-                className="w-full py-2.5 bg-orange-500 text-white text-sm font-medium rounded-xl hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-                {extracting ? <><Loader2 className="w-4 h-4 animate-spin" /> {extractStatus || "Extracting..."}</> : <><Dna className="w-4 h-4" /> Extract Genome</>}
-              </button>
+              {extracting ? (
+                <div className="w-full py-4 bg-orange-50 border border-orange-200 rounded-xl">
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-orange-600" />
+                    <span className="text-sm font-semibold text-orange-700">Processing</span>
+                  </div>
+                  <p className="text-xs text-orange-600 text-center">{extractStatus || "Analyzing video..."}</p>
+                  <p className="text-[10px] text-orange-400 text-center mt-1">This may take a minute depending on video length</p>
+                </div>
+              ) : (
+                <button onClick={runExtraction} disabled={refining}
+                  className="w-full py-2.5 bg-orange-500 text-white text-sm font-medium rounded-xl hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                  <Dna className="w-4 h-4" /> Extract Genome
+                </button>
+              )}
 
               {extractError && (
                 <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 whitespace-pre-wrap">
