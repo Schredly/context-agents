@@ -1,5 +1,8 @@
 import os
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+load_dotenv()  # Load .env file before anything else
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +10,8 @@ from fastapi.responses import FileResponse
 
 from bootstrap.demo_setup import seed_demo_data
 from workers.genome_worker import start_genome_worker
-from routers import actions_router, admin_router, agent_router, extractions_router, genomes_router, integrations_router, llm_configs_router, llm_usage_router, managed_integrations_router, runs_router, skills_router, tenants_router, tools_router, uc_runs_router, use_cases_router
+from routers import actions_router, admin_router, agent_router, extractions_router, genomes_router, integrations_router, llm_configs_router, llm_usage_router, managed_integrations_router, runs_router, skills_router, tenants_router, tools_router, translations_router, uc_runs_router, use_cases_router
+from routers.genome_studio import router as genome_studio_router
 from store import (
     InMemoryActionStore,
     InMemoryAgentUIRunEventStore,
@@ -18,6 +22,7 @@ from store import (
     InMemoryExtractionPayloadStore,
     InMemoryGenomeArtifactStore,
     InMemoryManagedIntegrationStore,
+    InMemoryTranslationStore,
     InMemoryGenomeStore,
     InMemoryGoogleDriveConfigStore,
     InMemoryIntegrationStore,
@@ -78,6 +83,7 @@ app.state.genome_store = InMemoryGenomeStore()
 app.state.genome_artifact_store = InMemoryGenomeArtifactStore()
 app.state.extraction_store = InMemoryExtractionPayloadStore()
 app.state.managed_integration_store = InMemoryManagedIntegrationStore()
+app.state.translation_store = InMemoryTranslationStore()
 app.state.runtime_defaults = {}  # tenant_id -> RuntimeDefaults
 
 app.include_router(tenants_router)
@@ -95,6 +101,8 @@ app.include_router(uc_runs_router)
 app.include_router(genomes_router)
 app.include_router(extractions_router)
 app.include_router(managed_integrations_router)
+app.include_router(translations_router)
+app.include_router(genome_studio_router)
 
 _pdf_dir = os.path.join(os.path.dirname(__file__), "generated_pdfs")
 os.makedirs(_pdf_dir, exist_ok=True)

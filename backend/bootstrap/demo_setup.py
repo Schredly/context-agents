@@ -15,6 +15,7 @@ from models import (
     Skill,
     Tenant,
     TenantLLMAssignment,
+    Translation,
     UseCase,
     UseCaseStep,
 )
@@ -54,6 +55,43 @@ async def seed_demo_data(app) -> None:
         await app.state.llm_assignment_store.assign("acme", llm_config.id)
         await app.state.llm_assignment_store.set_active("acme", llm_config.id)
 
+    # --- OpenAI LLM Config (seeded from env var) ---
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    if openai_key:
+        openai_config = LLMConfig(
+            id="llm_demo_openai",
+            label="GPT-4o",
+            provider="openai",
+            api_key=openai_key,
+            model="gpt-4o",
+            input_token_cost=0.005,
+            output_token_cost=0.015,
+        )
+        await app.state.llm_config_store.create(openai_config)
+        await app.state.llm_assignment_store.assign("acme", openai_config.id)
+        # Make OpenAI the active default if ANTHROPIC is not set, or if explicitly preferred
+        if not anthropic_key or os.environ.get("DEFAULT_LLM_PROVIDER", "") == "openai":
+            await app.state.llm_assignment_store.set_active("acme", openai_config.id)
+
+    # --- GitHub integration (seeded from env var so it survives restarts) ---
+    github_pat = os.environ.get("GITHUB_PAT", "")
+    github_org = os.environ.get("GITHUB_ORG", "Schredly")
+    github_repo = os.environ.get("GITHUB_DEFAULT_REPO", "https://github.com/Schredly/oy_genome.git")
+    if github_pat:
+        github_integration = Integration(
+            id="int_github_seed",
+            tenant_id="acme",
+            integration_type="github",
+            name="Genome",
+            enabled=True,
+            config={
+                "token": github_pat,
+                "org": github_org,
+                "default_repository": github_repo,
+            },
+        )
+        await app.state.integration_store.create(github_integration)
+
     # --- ServiceNow integration ---
     await app.state.snow_config_store.upsert(
         "acme",
@@ -82,6 +120,9 @@ async def seed_demo_data(app) -> None:
             IntegrationEndpoint(id="ep_catlist", name="List Catalogs",
                 path="/api/1939459/catalogtitleservice",
                 method="GET", description="List all available ServiceNow catalogs"),
+            IntegrationEndpoint(id="ep_apps", name="List Applications",
+                path="/api/1939459/overyonder_selfdeploy/extract/applications",
+                method="GET", description="List all discoverable applications via self-deploy extractor"),
             IntegrationEndpoint(id="ep_incidents", name="Search Incidents",
                 path="/api/now/table/incident", method="GET",
                 description="Query the incident table"),
@@ -482,4 +523,58 @@ async def seed_demo_data(app) -> None:
         )
         await app.state.genome_artifact_store.create(artifact)
 
-    print(f"[demo_setup] Seeded 'acme' tenant with ServiceNow + Replit integrations, 5 skills, 2 use cases, {len(action_defs)} actions, {len(genome_defs)} genomes + artifacts")
+    # --- Translations ---
+    translation_defs = [
+        {
+            "id": "trans_snow_replit",
+            "name": "ServiceNow Catalog \u2192 Replit App",
+            "description": "Transforms a ServiceNow service catalog genome into a Replit-deployable application with master prompt, catalog summary, and Replit config.",
+            "source_vendor": "ServiceNow",
+            "source_type": "service_catalog",
+            "target_platform": "replit",
+            "instructions": (
+                "You are translating a ServiceNow service catalog genome into a Replit application.\n\n"
+                "Given the genome YAML content, produce:\n"
+                "1. A master_prompt.md \u2014 comprehensive prompt for Replit Agent to build the app\n"
+                "2. A catalog_summary.json \u2014 structured JSON summary of the catalog item\n"
+                "3. A .replit config \u2014 Replit project configuration\n\n"
+                "The master prompt should describe the UI, API routes, data models, and workflows "
+                "that replicate the ServiceNow catalog item as a standalone web application.\n"
+                "Include all fields, validation rules, and approval workflows from the genome."
+            ),
+            "output_structure": {
+                "folders": ["Genome Transformations/replit-app"],
+                "files": ["master_prompt.md", "catalog_summary.json", ".replit"],
+            },
+            "status": "active",
+        },
+        {
+            "id": "trans_snow_github",
+            "name": "ServiceNow Catalog \u2192 GitHub Repository",
+            "description": "Transforms a ServiceNow service catalog genome into a GitHub-ready repository structure with README, schema, and migration scripts.",
+            "source_vendor": "ServiceNow",
+            "source_type": "service_catalog",
+            "target_platform": "github",
+            "instructions": (
+                "You are translating a ServiceNow service catalog genome into a GitHub repository structure.\n\n"
+                "Given the genome YAML content, produce:\n"
+                "1. A README.md \u2014 project overview, setup instructions, architecture notes\n"
+                "2. A schema.json \u2014 data model schema derived from genome objects and fields\n"
+                "3. A migration_plan.md \u2014 step-by-step migration guide from ServiceNow to the target\n\n"
+                "The README should explain what the original ServiceNow application does, "
+                "its key workflows, and how the migrated version preserves functionality.\n"
+                "The schema should map ServiceNow objects to standard data models."
+            ),
+            "output_structure": {
+                "folders": ["Genome Transformations/github-repo"],
+                "files": ["README.md", "schema.json", "migration_plan.md"],
+            },
+            "status": "active",
+        },
+    ]
+
+    for td in translation_defs:
+        translation = Translation(tenant_id="acme", **td)
+        await app.state.translation_store.create(translation)
+
+    print(f"[demo_setup] Seeded 'acme' tenant with ServiceNow + Replit integrations, 5 skills, 2 use cases, {len(action_defs)} actions, {len(genome_defs)} genomes + artifacts, {len(translation_defs)} translations")

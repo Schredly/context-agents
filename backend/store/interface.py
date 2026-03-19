@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from models import Action, AgentEvent, AgentRun, AgentUIRun, AgentUIRunEvent, ApplicationGenome, ClassificationSchema, ExtractionPayload, FeedbackEvent, GenomeArtifact, GoogleDriveConfig, Integration, LLMConfig, LLMUsageEvent, ManagedIntegration, MetricsEvent, ReplitConfig, RunTelemetry, ServiceNowConfig, Skill, Tenant, TenantLLMAssignment, UseCase, UseCaseRun
+from models import Action, AgentEvent, AgentRun, AgentUIRun, AgentUIRunEvent, ApplicationGenome, ClassificationSchema, ExtractionPayload, FeedbackEvent, GenomeArtifact, GoogleDriveConfig, Integration, LLMConfig, LLMUsageEvent, ManagedIntegration, MetricsEvent, ReplitConfig, RunTelemetry, ServiceNowConfig, Skill, Tenant, TenantLLMAssignment, Translation, UseCase, UseCaseRun
 
 
 class TenantStore(ABC):
@@ -311,6 +311,9 @@ class GenomeStore(ABC):
     async def list_for_tenant(self, tenant_id: str) -> list[ApplicationGenome]: ...
 
     @abstractmethod
+    async def update(self, genome_id: str, **kwargs: Any) -> Optional[ApplicationGenome]: ...
+
+    @abstractmethod
     async def delete(self, genome_id: str) -> bool: ...
 
 
@@ -360,3 +363,23 @@ class ManagedIntegrationStore(ABC):
 
     @abstractmethod
     async def delete(self, integration_id: str) -> bool: ...
+
+
+class TranslationStore(ABC):
+    @abstractmethod
+    async def create(self, translation: Translation) -> Translation: ...
+
+    @abstractmethod
+    async def get(self, translation_id: str) -> Optional[Translation]: ...
+
+    @abstractmethod
+    async def list_for_tenant(self, tenant_id: str) -> list[Translation]: ...
+
+    @abstractmethod
+    async def list_by_vendor(self, tenant_id: str, vendor: str) -> list[Translation]: ...
+
+    @abstractmethod
+    async def update(self, translation_id: str, **kwargs: Any) -> Optional[Translation]: ...
+
+    @abstractmethod
+    async def delete(self, translation_id: str) -> bool: ...

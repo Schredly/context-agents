@@ -555,3 +555,92 @@ class GenomeArtifact(BaseModel):
 - End-to-end smoke test: two identical payloads → first creates genome, second deduplicated with shared `genome_id`. Different payload → unique genome created.
 - Hash determinism verified: `{'b':2,'a':1}` and `{'a':1,'b':2}` produce same SHA-256.
 - All Python imports clean.
+
+---
+
+## Sprint #7 — 2026-03-19 — Translations Module: Reusable Genome Conversion Recipes
+
+**What happened:**
+- Added a full Translations module that makes genome-to-platform conversion recipes reusable, shareable, and manageable through the admin portal.
+- A Translation record stores: name, description, source_vendor, source_type, target_platform, LLM instructions (the recipe), output_structure, and status (active/draft).
+- Backend: new `Translation` model + request models, `TranslationStore` ABC, `InMemoryTranslationStore`, CRUD router at `/api/admin/{tenant_id}/translations`, plus `list_by_vendor` endpoint.
+- Genome Studio: added `/api/genome/run-translation` (applies a saved recipe via LLM) and `/api/genome/save-translation` (captures Studio work as a reusable Translation).
+- Frontend: `TranslationsPage` (admin list with table), `TranslationEditorPage` (create/edit form), both registered under `/genomes/translations`.
+- Genome Studio workspace: new "Translations" tab shows vendor-matching recipes with "Run" buttons; "Save as Translation" button appears after successful transforms.
+- Seeded 2 demo translations: "ServiceNow Catalog → Replit App" and "ServiceNow Catalog → GitHub Repository".
+- Navigation: added "Translations" sub-item under App Genomes in sidebar.
+
+**Files created:**
+| File | Purpose |
+|------|---------|
+| `backend/routers/translations.py` | CRUD router (list, get, create, update, delete, list_by_vendor) |
+| `src/app/pages/TranslationsPage.tsx` | Admin list page with table |
+| `src/app/pages/TranslationEditorPage.tsx` | Create/edit form with vendor/platform dropdowns, instructions textarea, output structure JSON editor |
+
+**Files modified:**
+| File | Change |
+|------|--------|
+| `backend/models.py` | Added `Translation`, `CreateTranslationRequest`, `UpdateTranslationRequest` |
+| `backend/store/interface.py` | Added `TranslationStore` ABC with 6 methods including `list_by_vendor` |
+| `backend/store/memory.py` | Added `InMemoryTranslationStore` implementation |
+| `backend/store/__init__.py` | Exported new store classes |
+| `backend/routers/__init__.py` | Exported `translations_router` |
+| `backend/main.py` | Initialized `translation_store`, included `translations_router` |
+| `backend/routers/genome_studio.py` | Added `POST /run-translation` and `POST /save-translation` endpoints |
+| `backend/bootstrap/demo_setup.py` | Added 2 seed translations with full instruction recipes |
+| `src/app/routes.tsx` | Added 3 translation routes (list, create, edit) before `genomes/:id` |
+| `src/app/components/Layout.tsx` | Added "Translations" to App Genomes sub-items |
+| `src/app/store/useGenomeStore.ts` | Added `TranslationRecord` type, `translations`/`translationsLoading` state, `fetchTranslations`, `runTranslation`, `saveAsTranslation` actions |
+| `src/app/pages/genome-studio/GenomeWorkspace.tsx` | Added "Translations" tab with recipe cards and run buttons; "Save as Translation" button in header and tab |
+| `src/app/pages/GenomeStudioPage.tsx` | Wired translation props to workspace, auto-fetches translations on file select |
+
+**Verification:**
+- TypeScript compiles cleanly (`npx tsc --noEmit` — no errors).
+- Python imports verified (`from routers.translations import router` etc.).
+
+---
+
+## Sprint #7b — 2026-03-19 — Translations: Full Repo Context, LLM Recipe Generation, Modal UX
+
+**What happened:**
+- Fixed `/run-translation` to read the full GitHub repo tree + multiple YAML files for context (matching `/transform` behavior), not just the single selected file's content. The LLM now sees the full repository structure when applying a translation recipe.
+- Added `POST /api/genome/generate-translation-recipe` — takes the current Studio context (original content, output files, chat history) and uses the LLM to reverse-engineer reusable instructions and output_structure for a new translation.
+- Replaced the `prompt()` dialogs for "Save as Translation" with a full modal (`SaveTranslationModal`) that lets the user: fill in metadata (name, description, vendor, source type, target platform), click "Generate Instructions" to have the LLM auto-create instructions from the current transformation context, and then edit the generated instructions before saving.
+- `fetchTranslations()` now accepts optional vendor (no vendor = fetch all). Translations are loaded when the repo connects (all translations), then refined by vendor when a specific file is selected.
+- The Translations tab now works before a file is selected (shows all available translations), and shows a "Save as Translation" button even when no translations exist yet.
+
+**Files created:**
+| File | Purpose |
+|------|---------|
+| `src/app/pages/genome-studio/SaveTranslationModal.tsx` | Modal with metadata fields, AI-powered instruction generation, and editable instructions/output_structure |
+
+**Files modified:**
+| File | Change |
+|------|--------|
+| `backend/routers/genome_studio.py` | `/run-translation` now reads full repo tree + YAML files; added `POST /generate-translation-recipe` with `_RECIPE_SYSTEM` prompt; tracked as `genome-generate-recipe` in cost ledger |
+| `src/app/store/useGenomeStore.ts` | `fetchTranslations` accepts optional vendor; added `generateTranslationRecipe`; `saveAsTranslation` refreshes translations list after save |
+| `src/app/pages/GenomeStudioPage.tsx` | Fetches all translations on repo connect; vendor-specific refine on file select; opens `SaveTranslationModal` instead of `prompt()` |
+| `src/app/pages/genome-studio/GenomeWorkspace.tsx` | Updated empty-state copy; "Save as Translation" available even with no existing translations |
+
+**Verification:**
+- TypeScript compiles cleanly.
+- Python imports clean from backend directory.
+
+---
+
+## Sprint #7c — 2026-03-19 — Translations: Selective Load + Run Fix
+
+**What happened:**
+- Translations no longer auto-load on repo connect or file select. The Translations tab now starts empty with a "Load Translations" button that the user clicks to fetch available translations on demand.
+- Once loaded, translations appear in a left-panel browser with search/filter. User selects a translation to see its full details (instructions preview, vendor/target badges) in a right detail panel.
+- Run button is now enabled whenever a repo is connected (no longer requires a specific file to be selected). The backend already reads the full repo tree, so a selected file is optional for more targeted results.
+- Run now posts a user message to chat ("Run translation: [name]") so the action is visible, and the assistant reply shows the result or error. This gives clear feedback that the run is happening.
+- Error handling fixed: `loadingState` now resets to `"idle"` (not `"error"`) after failures, preventing the UI from getting stuck. Error messages always appear in chat.
+- The "Create New Translation" button is at the bottom of the translations browser panel (always accessible).
+
+**Files modified:**
+| File | Change |
+|------|--------|
+| `src/app/pages/genome-studio/GenomeWorkspace.tsx` | Full rewrite of Translations tab: two-panel browse-and-select UX with search, "Load Translations" button, detail panel with Run. New props: `onFetchTranslations`, `repoConnected`. `onRunTranslation` now returns Promise. |
+| `src/app/pages/GenomeStudioPage.tsx` | Removed auto-fetch on repo connect. Added `handleFetchTranslations` and `handleRunTranslation` (adds chat message before running). Passes `repoConnected` and `onFetchTranslations` props. |
+| `src/app/store/useGenomeStore.ts` | `runTranslation` error handling: resets to `"idle"` instead of `"error"`, always posts error to chat with details. Clears error state at start of run. |

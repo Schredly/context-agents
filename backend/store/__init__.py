@@ -21,6 +21,7 @@ from store.interface import (
     TelemetryStore,
     TenantLLMAssignmentStore,
     TenantStore,
+    TranslationStore,
     UseCaseRunStore,
     UseCaseStore,
 )
@@ -47,6 +48,7 @@ from store.memory import (
     InMemoryTelemetryStore,
     InMemoryTenantLLMAssignmentStore,
     InMemoryTenantStore,
+    InMemoryTranslationStore,
     InMemoryUseCaseRunStore,
     InMemoryUseCaseStore,
 )
@@ -75,6 +77,7 @@ __all__ = [
     "GenomeStore",
     "GenomeArtifactStore",
     "ExtractionPayloadStore",
+    "TranslationStore",
     "InMemoryTenantStore",
     "InMemoryClassificationSchemaStore",
     "InMemoryGoogleDriveConfigStore",
@@ -100,4 +103,5 @@ __all__ = [
     "InMemoryExtractionPayloadStore",
     "ManagedIntegrationStore",
     "InMemoryManagedIntegrationStore",
+    "InMemoryTranslationStore",
 ]

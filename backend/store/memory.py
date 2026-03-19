@@ -28,6 +28,7 @@ from models import (
     Skill,
     Tenant,
     TenantLLMAssignment,
+    Translation,
     UseCase,
     UseCaseRun,
 )
@@ -54,6 +55,7 @@ from store.interface import (
     TelemetryStore,
     TenantLLMAssignmentStore,
     TenantStore,
+    TranslationStore,
     UseCaseRunStore,
     UseCaseStore,
 )
@@ -604,6 +606,17 @@ class InMemoryGenomeStore(GenomeStore):
     async def list_for_tenant(self, tenant_id: str) -> list[ApplicationGenome]:
         return [g for g in self._genomes.values() if g.tenant_id == tenant_id]
 
+    async def update(self, genome_id: str, **kwargs: Any) -> Optional[ApplicationGenome]:
+        existing = self._genomes.get(genome_id)
+        if existing is None:
+            return None
+        data = existing.model_dump()
+        data.update({k: v for k, v in kwargs.items() if v is not None})
+        data["updated_at"] = datetime.now(timezone.utc)
+        updated = ApplicationGenome(**data)
+        self._genomes[genome_id] = updated
+        return updated
+
     async def delete(self, genome_id: str) -> bool:
         return self._genomes.pop(genome_id, None) is not None
 
@@ -704,3 +717,42 @@ class InMemoryManagedIntegrationStore(ManagedIntegrationStore):
 
     async def delete(self, integration_id: str) -> bool:
         return self._integrations.pop(integration_id, None) is not None
+
+
+class InMemoryTranslationStore(TranslationStore):
+    def __init__(self) -> None:
+        self._translations: dict[str, Translation] = {}
+
+    async def create(self, translation: Translation) -> Translation:
+        self._translations[translation.id] = translation
+        return translation
+
+    async def get(self, translation_id: str) -> Optional[Translation]:
+        return self._translations.get(translation_id)
+
+    async def list_for_tenant(self, tenant_id: str) -> list[Translation]:
+        return sorted(
+            [t for t in self._translations.values() if t.tenant_id == tenant_id],
+            key=lambda t: t.created_at,
+            reverse=True,
+        )
+
+    async def list_by_vendor(self, tenant_id: str, vendor: str) -> list[Translation]:
+        return [
+            t for t in self._translations.values()
+            if t.tenant_id == tenant_id and t.source_vendor.lower() == vendor.lower()
+        ]
+
+    async def update(self, translation_id: str, **kwargs: Any) -> Optional[Translation]:
+        existing = self._translations.get(translation_id)
+        if existing is None:
+            return None
+        data = existing.model_dump()
+        data.update({k: v for k, v in kwargs.items() if v is not None})
+        data["updated_at"] = datetime.now(timezone.utc)
+        updated = Translation(**data)
+        self._translations[translation_id] = updated
+        return updated
+
+    async def delete(self, translation_id: str) -> bool:
+        return self._translations.pop(translation_id, None) is not None

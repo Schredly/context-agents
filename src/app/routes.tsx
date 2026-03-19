@@ -24,6 +24,10 @@ import GenomeDetailPage from './pages/GenomeDetailPage';
 import GenomeCapturePage from './pages/GenomeCapturePage';
 import GenomeInsightsPage from './pages/GenomeInsightsPage';
 import ToolsPage from './pages/ToolsPage';
+import DashboardPage from './pages/DashboardPage';
+import GenomeStudioPage from './pages/GenomeStudioPage';
+import TranslationsPage from './pages/TranslationsPage';
+import TranslationEditorPage from './pages/TranslationEditorPage';
 
 export const router = createBrowserRouter([
   {
@@ -32,7 +36,11 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate to="/tenants" replace />,
+        Component: DashboardPage,
+      },
+      {
+        path: 'dashboard',
+        Component: DashboardPage,
       },
       {
         path: 'tenants',
@@ -131,6 +139,18 @@ export const router = createBrowserRouter([
         Component: GenomeInsightsPage,
       },
       {
+        path: 'genomes/translations',
+        Component: TranslationsPage,
+      },
+      {
+        path: 'genomes/translations/create',
+        Component: TranslationEditorPage,
+      },
+      {
+        path: 'genomes/translations/:id',
+        Component: TranslationEditorPage,
+      },
+      {
         path: 'genomes/:id',
         Component: GenomeDetailPage,
       },
@@ -147,5 +167,9 @@ export const router = createBrowserRouter([
   {
     path: '/agentui',
     Component: AgentUIPage,
+  },
+  {
+    path: '/genome-studio',
+    Component: GenomeStudioPage,
   },
 ]);

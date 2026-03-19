@@ -840,7 +840,7 @@ estimate_cost = calculate_llm_cost
 
 class RuntimeDefaults(BaseModel):
     tenant_id: str
-    max_tokens_per_run: int = 8000
+    max_tokens_per_run: int = 16384
     cost_guardrail_per_run: float = 0.5
     cost_guardrail_daily: float = 500.0
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -948,3 +948,43 @@ class CreateExtractionRequest(BaseModel):
     source_platform: str
     application_name: str
     payload: dict = Field(default_factory=dict)
+
+
+# --- Translations ---
+
+
+class Translation(BaseModel):
+    id: str                          # "trans_" + uuid hex[:12]
+    tenant_id: str
+    name: str
+    description: str = ""
+    source_vendor: str = ""          # servicenow, salesforce, etc.
+    source_type: str = ""            # service_catalog, application, etc.
+    target_platform: str = ""        # replit, github, salesforce, etc.
+    instructions: str = ""           # the LLM prompt recipe
+    output_structure: dict = Field(default_factory=dict)  # expected folders/files
+    status: Literal["active", "draft"] = "draft"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CreateTranslationRequest(BaseModel):
+    name: str
+    description: str = ""
+    source_vendor: str = ""
+    source_type: str = ""
+    target_platform: str = ""
+    instructions: str = ""
+    output_structure: dict = Field(default_factory=dict)
+    status: Literal["active", "draft"] = "draft"
+
+
+class UpdateTranslationRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    source_vendor: Optional[str] = None
+    source_type: Optional[str] = None
+    target_platform: Optional[str] = None
+    instructions: Optional[str] = None
+    output_structure: Optional[dict] = None
+    status: Optional[Literal["active", "draft"]] = None
