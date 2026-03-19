@@ -396,6 +396,51 @@ export function useGenomeStore() {
     }
   }, [chatHistory, filesystemPlan, originalContent]);
 
+  const extractVideoGenome = useCallback(async (videoId: string, userNotes: string = "") => {
+    setLoadingState("transforming");
+    setSavedBranch(null);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/video-extract`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_id: videoId, user_notes: userNotes }),
+      });
+      const data = await res.json();
+
+      if (data.status === "error") {
+        let errText = `Video extraction failed: ${data.error || "Unknown error"}`;
+        if (data.raw_response) errText += `\n\nLLM response:\n${data.raw_response.slice(0, 500)}`;
+        setChatHistory(prev => [...prev, { id: Date.now().toString(), type: "assistant", content: errText, timestamp: new Date() }]);
+        setLoadingState("idle");
+        return data;
+      }
+
+      const newPlan = data.filesystem_plan as FilesystemPlan | undefined;
+      setFilesystemPlan(prev => {
+        if (!newPlan?.files?.length) return prev;
+        if (!prev) return newPlan;
+        const existingPaths = new Set(prev.files.map(f => f.path));
+        return { ...prev, files: [...prev.files, ...newPlan.files.filter(f => !existingPaths.has(f.path))], folders: [...new Set([...prev.folders, ...(newPlan.folders || [])])], branch_name: newPlan.branch_name || prev.branch_name };
+      });
+
+      const fileCount = newPlan?.files?.length || 0;
+      const msg = data.message || data.explanation || "Video genome extracted.";
+      const summary = fileCount > 0 ? `${msg}\n\n${fileCount} file(s) ready to commit to branch: ${newPlan?.branch_name || ""}` : msg;
+
+      setChatHistory(prev => [...prev, {
+        id: Date.now().toString(), type: "assistant", content: summary, timestamp: new Date(),
+        showDiff: true, filesystemPlan: newPlan, reasoning: data.reasoning || undefined,
+      }]);
+      setLoadingState("idle");
+      return data;
+    } catch (e) {
+      setChatHistory(prev => [...prev, { id: Date.now().toString(), type: "assistant", content: `Video extraction failed: ${e instanceof Error ? e.message : "Network error"}`, timestamp: new Date() }]);
+      setLoadingState("idle");
+      return null;
+    }
+  }, []);
+
   const saveAsTranslation = useCallback(async (recipe: {
     name: string;
     description?: string;
@@ -446,6 +491,7 @@ export function useGenomeStore() {
     translationsLoading,
     fetchTranslations,
     runTranslation,
+    extractVideoGenome,
     generateTranslationRecipe,
     saveAsTranslation,
   };

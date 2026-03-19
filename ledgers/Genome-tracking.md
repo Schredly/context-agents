@@ -644,3 +644,35 @@ class GenomeArtifact(BaseModel):
 | `src/app/pages/genome-studio/GenomeWorkspace.tsx` | Full rewrite of Translations tab: two-panel browse-and-select UX with search, "Load Translations" button, detail panel with Run. New props: `onFetchTranslations`, `repoConnected`. `onRunTranslation` now returns Promise. |
 | `src/app/pages/GenomeStudioPage.tsx` | Removed auto-fetch on repo connect. Added `handleFetchTranslations` and `handleRunTranslation` (adds chat message before running). Passes `repoConnected` and `onFetchTranslations` props. |
 | `src/app/store/useGenomeStore.ts` | `runTranslation` error handling: resets to `"idle"` instead of `"error"`, always posts error to chat with details. Clears error state at start of run. |
+
+---
+
+## Sprint #8 — 2026-03-19 — Video Genome: Extract Application Genomes from Video
+
+**What happened:**
+- New "Video Genome" module: upload a video of someone clicking through software, LLM analyzes extracted frames via vision API, builds an application genome, and commits it to GitHub.
+- Extended `call_llm` to support multimodal (vision) messages via an optional `content_blocks` parameter. When provided, Anthropic receives native image content blocks; OpenAI receives base64 data URI `image_url` blocks. All existing callers are unaffected (parameter defaults to `None`).
+- New `video_genome_service.py`: extracts frames from video via ffmpeg (every 3s, max 20 frames), builds Anthropic-compatible vision content blocks with base64-encoded JPEG images, orchestrates the full pipeline.
+- Admin page: 3-step wizard (Upload Video → Select GitHub Target → Extract & Commit) with animated execution pipeline showing real-time progress.
+- Genome Studio integration: ChatInterface accepts video file uploads (.mp4/.mov/.webm), auto-uploads to `/api/video-genome/upload`, and when the user says "extract the genome" with a video attached, triggers the video genome extraction pipeline. Output appears as a filesystem_plan in the Transformed tab.
+- Token usage tracked via `_track_usage("video-genome-extract", ...)` — appears in Cost Ledger / LLM Usage automatically.
+- Videos stored locally in `backend/uploaded_videos/` with UUID-prefixed filenames.
+
+**Files created:**
+| File | Purpose |
+|------|---------|
+| `backend/services/video_genome_service.py` | Frame extraction (ffmpeg), vision prompt builder, LLM analysis orchestrator |
+| `backend/routers/video_genome.py` | Upload, extract, commit endpoints for standalone admin page |
+| `src/app/pages/VideoGenomePage.tsx` | 3-step wizard admin page |
+
+**Files modified:**
+| File | Change |
+|------|--------|
+| `backend/services/claude_client.py` | Added `content_blocks` param to `_call_anthropic`, `_call_openai`, `call_llm` for multimodal vision support |
+| `backend/routers/genome_studio.py` | Added `POST /video-extract` endpoint for Studio integration |
+| `backend/main.py` | Registered `video_genome_router` |
+| `src/app/routes.tsx` | Added `/genomes/video` route |
+| `src/app/components/Layout.tsx` | Added "Video Genome" to App Genomes nav |
+| `src/app/pages/genome-studio/ChatInterface.tsx` | Accepts video file types, uploads videos to `/api/video-genome/upload` |
+| `src/app/store/useGenomeStore.ts` | Added `extractVideoGenome` callback |
+| `src/app/pages/GenomeStudioPage.tsx` | Video attachment detection, triggers `extractVideoGenome` when user says "extract genome" |

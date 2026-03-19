@@ -28,6 +28,7 @@ import DashboardPage from './pages/DashboardPage';
 import GenomeStudioPage from './pages/GenomeStudioPage';
 import TranslationsPage from './pages/TranslationsPage';
 import TranslationEditorPage from './pages/TranslationEditorPage';
+import VideoGenomePage from './pages/VideoGenomePage';
 
 export const router = createBrowserRouter([
   {
@@ -137,6 +138,10 @@ export const router = createBrowserRouter([
       {
         path: 'genomes/insights',
         Component: GenomeInsightsPage,
+      },
+      {
+        path: 'genomes/video',
+        Component: VideoGenomePage,
       },
       {
         path: 'genomes/translations',

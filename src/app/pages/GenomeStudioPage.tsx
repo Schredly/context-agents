@@ -93,6 +93,16 @@ export default function GenomeStudioPage() {
   const handleSendMessage = async (content: string, attachments?: string[]) => {
     store.addUserMessage(content);
 
+    // Check for video attachments — only extract genome when explicitly asked
+    const videoAttachment = attachments?.find(a => a.startsWith("[video:"));
+    if (videoAttachment) {
+      const videoId = videoAttachment.match(/\[video:(vid_[a-f0-9]+)\]/)?.[1];
+      if (videoId && /extract.*genome/i.test(content)) {
+        await store.extractVideoGenome(videoId, content);
+        return;
+      }
+    }
+
     const lower = content.toLowerCase();
     const isTransform = /\b(create|add|convert|store|save|move|extract|generate|build|write|make|transform|turn|put|commit)\b/.test(lower);
     const isQuestion = !isTransform && (

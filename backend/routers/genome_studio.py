@@ -760,3 +760,87 @@ async def save_translation(body: SaveTranslationRequest, request: Request):
     )
     created = await request.app.state.translation_store.create(translation)
     return {"status": "ok", "translation": created}
+
+
+# ---------------------------------------------------------------------------
+# Video genome extraction from Studio
+# ---------------------------------------------------------------------------
+
+
+class StudioVideoExtractRequest(BaseModel):
+    video_id: str
+    user_notes: str = ""
+
+
+@router.post("/video-extract")
+async def studio_video_extract(body: StudioVideoExtractRequest, request: Request):
+    """Extract genome from video in Genome Studio context. Returns filesystem_plan format."""
+    import os as _os
+    upload_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "uploaded_videos")
+    video_file = None
+    for fname in _os.listdir(upload_dir):
+        if fname.startswith(body.video_id):
+            video_file = _os.path.join(upload_dir, fname)
+            break
+    if not video_file or not _os.path.isfile(video_file):
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    try:
+        from services.snow_to_replit import _get_llm_config
+        llm_cfg = await _get_llm_config(TENANT, request.app)
+    except Exception as exc:
+        return {"status": "error", "error": f"LLM not configured: {exc}"}
+
+    defaults = request.app.state.runtime_defaults.get(TENANT)
+    max_tokens = defaults.max_tokens_per_run if defaults else 16384
+
+    t0 = time.monotonic()
+    try:
+        from services.video_genome_service import analyze_video_for_genome
+        raw_response, meta = await analyze_video_for_genome(
+            video_path=video_file,
+            llm_cfg=llm_cfg,
+            max_tokens=max_tokens,
+            user_notes=body.user_notes,
+        )
+    except RuntimeError as exc:
+        return {"status": "error", "error": str(exc)}
+    except Exception as exc:
+        return {"status": "error", "error": f"LLM call failed: {exc}"}
+
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    await _track_usage("video-genome-extract", llm_cfg["model"], meta, request.app, latency_ms)
+
+    parsed = _extract_json(raw_response)
+    if parsed is None:
+        return {"status": "error", "error": "LLM returned invalid JSON.", "raw_response": raw_response[:1000]}
+
+    # Convert genome result into filesystem_plan format for the workspace
+    import yaml as _yaml
+    timestamp = str(int(time.time()))
+    app_name = parsed.get("application_name", "unknown_app")
+    vendor = parsed.get("vendor", "unknown")
+    app_slug = app_name.lower().replace(" ", "_").replace("/", "_")
+    base_path = f"genomes/tenants/acme/vendors/{vendor}/{app_slug}"
+
+    genome_yaml = _yaml.dump(parsed, default_flow_style=False, sort_keys=False)
+
+    fs_plan = {
+        "branch_name": f"genome-video-{timestamp}",
+        "base_path": base_path,
+        "folders": [base_path],
+        "files": [
+            {"path": f"{base_path}/genome.yaml", "content": genome_yaml},
+        ],
+    }
+
+    return {
+        "status": "ok",
+        "reasoning": parsed.get("reasoning", []),
+        "explanation": parsed.get("summary", f"Extracted genome for {app_name} from video"),
+        "filesystem_plan": fs_plan,
+        "diff": "",
+        "preview": "",
+        "message": f"Extracted genome for {app_name} ({vendor}) — {len(parsed.get('genome_document', {}).get('objects', []))} objects identified",
+        "genome": parsed,
+    }

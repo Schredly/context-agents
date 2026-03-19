@@ -190,13 +190,13 @@ async def test_api_key(provider: str, api_key: str, model: str) -> None:
         raise ClaudeClientError(f"Unsupported provider: {provider}")
 
 
-async def _call_anthropic(api_key: str, model: str, user_message: str, *, system_prompt: str = SYSTEM_PROMPT) -> tuple[str, dict]:
+async def _call_anthropic(api_key: str, model: str, user_message: str, *, system_prompt: str = SYSTEM_PROMPT, content_blocks: list[dict] | None = None) -> tuple[str, dict]:
     """Call the Anthropic Messages API. Returns (response_text, raw_body)."""
     payload = {
         "model": model,
         "max_tokens": 16384,
         "system": system_prompt,
-        "messages": [{"role": "user", "content": user_message}],
+        "messages": [{"role": "user", "content": content_blocks if content_blocks else user_message}],
     }
 
     start = time.monotonic()
@@ -253,45 +253,72 @@ def _is_reasoning_model(model: str) -> bool:
     return model in _OPENAI_REASONING_MODELS
 
 
-async def _call_openai(api_key: str, model: str, user_message: str, *, system_prompt: str = SYSTEM_PROMPT) -> tuple[str, dict]:
+async def _call_openai(api_key: str, model: str, user_message: str, *, system_prompt: str = SYSTEM_PROMPT, max_tokens: int = 16384, content_blocks: list[dict] | None = None) -> tuple[str, dict]:
     """Call the OpenAI Chat Completions API. Returns (response_text, raw_meta)."""
     # Reasoning models (o-series) use "developer" role instead of "system"
     # and need higher token limits for chain-of-thought overhead
     sys_role = "developer" if _is_reasoning_model(model) else "system"
-    token_limit = 16384
+    token_limit = max_tokens
+
+    # Map content_blocks for OpenAI
+    if content_blocks:
+        openai_content = []
+        for block in content_blocks:
+            if block.get("type") == "image":
+                src = block["source"]
+                openai_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{src['media_type']};base64,{src['data']}"}
+                })
+            elif block.get("type") == "text":
+                openai_content.append({"type": "text", "text": block["text"]})
+        user_content = openai_content
+    else:
+        user_content = user_message
+
     payload: dict = {
         "model": model,
         "max_completion_tokens": token_limit,
         "messages": [
             {"role": sys_role, "content": system_prompt},
-            {"role": "user", "content": user_message},
+            {"role": "user", "content": user_content},
         ],
     }
 
+    import asyncio as _asyncio
+
     start = time.monotonic()
-    async with httpx.AsyncClient(timeout=CLAUDE_TIMEOUT) as client:
-        res = await client.post(
-            OPENAI_API_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        )
+    res = None
+    for attempt in range(3):
+        async with httpx.AsyncClient(timeout=CLAUDE_TIMEOUT) as client:
+            res = await client.post(
+                OPENAI_API_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+        if res.status_code == 429:
+            wait = min(2 ** attempt * 3, 10)
+            logger.warning("OpenAI rate limited (429), retrying in %ds (attempt %d/3)", wait, attempt + 1)
+            await _asyncio.sleep(wait)
+            continue
+        break
     latency_ms = int((time.monotonic() - start) * 1000)
 
-    if not res.is_success:
+    if res is None or not res.is_success:
         detail = ""
         try:
-            detail = res.json().get("error", {}).get("message", "")
+            detail = res.json().get("error", {}).get("message", "") if res else "No response"
         except Exception:
             pass
         logger.error(
             "OpenAI API failed: model=%s http_status=%d error=%s",
-            model, res.status_code, detail or res.text[:200],
+            model, res.status_code if res else 0, detail or (res.text[:200] if res else "timeout"),
         )
         raise ClaudeClientError(
-            f"OpenAI API returned {res.status_code}: {detail or res.text[:200]}"
+            f"OpenAI API returned {res.status_code if res else 'timeout'}: {detail or (res.text[:200] if res else '')}"
         )
 
     body = res.json()
@@ -311,12 +338,13 @@ async def _call_openai(api_key: str, model: str, user_message: str, *, system_pr
 
 
 async def call_llm(provider: str, api_key: str, model: str,
-                   user_message: str, system_prompt: str) -> tuple[str, dict]:
+                   user_message: str, system_prompt: str, max_tokens: int = 16384,
+                   content_blocks: list[dict] | None = None) -> tuple[str, dict]:
     """Generic LLM call — dispatches to the right provider."""
     api_key = _clean_key(api_key)
     if provider == "openai":
-        return await _call_openai(api_key, model, user_message, system_prompt=system_prompt)
-    return await _call_anthropic(api_key, model, user_message, system_prompt=system_prompt)
+        return await _call_openai(api_key, model, user_message, system_prompt=system_prompt, max_tokens=max_tokens, content_blocks=content_blocks)
+    return await _call_anthropic(api_key, model, user_message, system_prompt=system_prompt, content_blocks=content_blocks)
 
 
 async def synthesize_resolution(
