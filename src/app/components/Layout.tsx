@@ -45,8 +45,8 @@ const navigation: NavItem[] = [
     icon: Dna,
     subItems: [
       { name: 'Capture', href: '/genomes/capture' },
-      { name: 'Video Genome', href: '/genomes/video' },
       { name: 'Genomes', href: '/genomes' },
+      { name: 'Video Genome', href: '/genomes/video' },
       { name: 'Translations', href: '/genomes/translations' },
       { name: 'Insights', href: '/genomes/insights' },
     ],

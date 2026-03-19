@@ -47,9 +47,12 @@ async def _track_usage(skill: str, model: str, meta: dict, app, latency_ms: int 
 # Upload
 # ---------------------------------------------------------------------------
 
+MAX_VIDEO_SIZE = 500 * 1024 * 1024  # 500 MB
+
+
 @router.post("/upload")
 async def upload_video(file: UploadFile = File(...)):
-    """Upload a video file. Returns video_id for subsequent operations."""
+    """Upload a video file. Streams to disk to handle large files."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
@@ -61,11 +64,29 @@ async def upload_video(file: UploadFile = File(...)):
     safe_name = f"{video_id}{ext}"
     save_path = os.path.join(UPLOAD_DIR, safe_name)
 
-    content = await file.read()
-    with open(save_path, "wb") as f:
-        f.write(content)
+    # Stream to disk in chunks to handle large files
+    total_bytes = 0
+    try:
+        with open(save_path, "wb") as f:
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1 MB chunks
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_VIDEO_SIZE:
+                    f.close()
+                    os.remove(save_path)
+                    raise HTTPException(status_code=413, detail="Video exceeds 500 MB limit")
+                f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("[video_genome] Upload failed: %s", exc)
+        if os.path.exists(save_path):
+            os.remove(save_path)
+        raise HTTPException(status_code=500, detail=f"Upload failed: {exc}")
 
-    size_mb = len(content) / (1024 * 1024)
+    size_mb = total_bytes / (1024 * 1024)
     logger.info("[video_genome] Uploaded %s (%.1f MB) → %s", file.filename, size_mb, safe_name)
 
     return {

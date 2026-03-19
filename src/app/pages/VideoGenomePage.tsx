@@ -11,14 +11,13 @@ import {
   ArrowRight,
   Dna,
   FileText,
+  Save,
+  Pencil,
+  Eye,
 } from "lucide-react";
 
 const TENANT = "acme";
 const API = `/api/admin/${TENANT}`;
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 interface Integration {
   id: string;
@@ -26,7 +25,6 @@ interface Integration {
   name: string;
   enabled: boolean;
   config: Record<string, string>;
-  connection_status: string;
 }
 
 interface StepState {
@@ -35,33 +33,12 @@ interface StepState {
   message: string;
 }
 
-interface ExtractResult {
-  genome: any;
-  objects_found: number;
-  fields_found: number;
-  workflows_found: number;
-  frames_extracted: number;
-}
-
-interface CommitResult {
-  file_count: number;
-  repo_url: string;
-  branch: string;
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 const WIZARD_STEPS = [
   { id: 1, label: "Upload Video" },
   { id: 2, label: "GitHub Target" },
-  { id: 3, label: "Extract & Commit" },
+  { id: 3, label: "Extract Genome" },
+  { id: 4, label: "Review & Commit" },
 ];
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export default function VideoGenomePage() {
   const [step, setStep] = useState(1);
@@ -81,37 +58,36 @@ export default function VideoGenomePage() {
   const [selectedGithub, setSelectedGithub] = useState<Integration | null>(null);
   const [applicationName, setApplicationName] = useState("");
 
-  // Step 3 — extract & commit
-  const [pipeline, setPipeline] = useState<StepState[]>([
-    { label: "Extracting frames", status: "idle", message: "" },
-    { label: "Analyzing with AI", status: "idle", message: "" },
-    { label: "Building genome", status: "idle", message: "" },
-    { label: "Committing to GitHub", status: "idle", message: "" },
+  // Step 3 — extract
+  const [extractPipeline, setExtractPipeline] = useState<StepState[]>([
+    { label: "Extracting frames from video", status: "idle", message: "" },
+    { label: "Analyzing frames with AI vision", status: "idle", message: "" },
+    { label: "Building genome document", status: "idle", message: "" },
   ]);
-  const [extractResult, setExtractResult] = useState<ExtractResult | null>(null);
-  const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
-  const [pipelineRunning, setPipelineRunning] = useState(false);
-  const [pipelineError, setPipelineError] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [genomeResult, setGenomeResult] = useState<any>(null);
+  const [genomeYaml, setGenomeYaml] = useState("");
 
-  // Load integrations when entering step 2
+  // Step 4 — commit
+  const [committing, setCommitting] = useState(false);
+  const [commitError, setCommitError] = useState<string | null>(null);
+  const [commitResult, setCommitResult] = useState<any>(null);
+
+  // Load integrations on step 2
   useEffect(() => {
     if (step === 2 && integrations.length === 0) {
-      fetchIntegrations();
+      setLoadingIntegrations(true);
+      fetch(`${API}/integrations/?filter_tenant=all`)
+        .then((r) => r.json())
+        .then((data) => {
+          const list = Array.isArray(data) ? data : [];
+          setIntegrations(list.filter((i: Integration) => i.integration_type === "github"));
+        })
+        .catch(() => {})
+        .finally(() => setLoadingIntegrations(false));
     }
   }, [step]);
-
-  const fetchIntegrations = async () => {
-    setLoadingIntegrations(true);
-    try {
-      const res = await fetch(`${API}/integrations/?filter_tenant=all`);
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : data.integrations || [];
-      setIntegrations(list.filter((i: Integration) => i.integration_type === "github"));
-    } catch {
-      setIntegrations([]);
-    }
-    setLoadingIntegrations(false);
-  };
 
   // ---------------------------------------------------------------------------
   // Step 1: Upload
@@ -133,95 +109,121 @@ export default function VideoGenomePage() {
     try {
       const formData = new FormData();
       formData.append("file", videoFile);
-      const res = await fetch("/api/video-genome/upload", { method: "POST", body: formData });
+      const res = await fetch("/api/video-genome/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        setUploadError(`Server error ${res.status}: ${text.slice(0, 200)}`);
+        setUploading(false);
+        return;
+      }
       const data = await res.json();
       if (data.status === "ok") {
         setVideoId(data.video_id);
       } else {
-        setUploadError(data.error || "Upload failed");
+        setUploadError(data.detail || data.error || "Upload failed");
       }
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Upload failed");
+      setUploadError(`Network error: ${err instanceof Error ? err.message : "Could not reach server. Is the backend running?"}`);
     }
     setUploading(false);
   };
 
   // ---------------------------------------------------------------------------
-  // Step 3: Extract & Commit pipeline
+  // Step 3: Extract genome
   // ---------------------------------------------------------------------------
 
-  const updatePipeline = (index: number, update: Partial<StepState>) => {
-    setPipeline((prev) => prev.map((s, i) => (i === index ? { ...s, ...update } : s)));
-  };
+  const updateExtractStep = (idx: number, update: Partial<StepState>) =>
+    setExtractPipeline((prev) => prev.map((s, i) => (i === idx ? { ...s, ...update } : s)));
 
-  const runPipeline = async () => {
-    setPipelineRunning(true);
-    setPipelineError(null);
-    setExtractResult(null);
-    setCommitResult(null);
-
-    // Reset pipeline
-    setPipeline([
-      { label: "Extracting frames", status: "running", message: "" },
-      { label: "Analyzing with AI", status: "idle", message: "" },
-      { label: "Building genome", status: "idle", message: "" },
-      { label: "Committing to GitHub", status: "idle", message: "" },
+  const runExtraction = async () => {
+    setExtracting(true);
+    setExtractError(null);
+    setGenomeResult(null);
+    setGenomeYaml("");
+    setExtractPipeline([
+      { label: "Extracting frames from video", status: "running", message: "" },
+      { label: "Analyzing frames with AI vision", status: "idle", message: "" },
+      { label: "Building genome document", status: "idle", message: "" },
     ]);
 
-    try {
-      // Step 1: Extract frames + AI analysis
-      updatePipeline(0, { status: "running" });
-      updatePipeline(1, { status: "running" });
+    updateExtractStep(0, { status: "running" });
 
-      const extractRes = await fetch("/api/video-genome/extract", {
+    try {
+      // Simulate frame extraction step, then AI runs
+      setTimeout(() => {
+        updateExtractStep(0, { status: "done", message: "Frames extracted" });
+        updateExtractStep(1, { status: "running", message: "Sending to LLM..." });
+      }, 1500);
+
+      const res = await fetch("/api/video-genome/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ video_id: videoId, user_notes: userNotes }),
       });
-      const extractData = await extractRes.json();
 
-      if (extractData.status === "error") {
-        updatePipeline(0, { status: "error", message: extractData.error || "Extraction failed" });
-        updatePipeline(1, { status: "error" });
-        setPipelineError(extractData.error || "Extraction failed");
-        setPipelineRunning(false);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Server error ${res.status}: ${text.slice(0, 200)}`);
+      }
+
+      const data = await res.json();
+
+      if (data.status === "error") {
+        updateExtractStep(0, { status: "done" });
+        updateExtractStep(1, { status: "error", message: data.error || "Failed" });
+        setExtractError(data.error || "Extraction failed");
+        setExtracting(false);
         return;
       }
 
-      updatePipeline(0, { status: "done", message: `${extractData.frames_extracted || 0} frames extracted` });
-      updatePipeline(1, { status: "done", message: "AI analysis complete" });
-      updatePipeline(2, { status: "done", message: `${extractData.objects_found || 0} objects, ${extractData.fields_found || 0} fields, ${extractData.workflows_found || 0} workflows` });
+      updateExtractStep(0, { status: "done", message: "Frames extracted" });
+      updateExtractStep(1, { status: "done", message: `${data.input_tokens || 0} input tokens` });
+      updateExtractStep(2, { status: "done", message: genomeStats(data.genome) });
 
-      setExtractResult(extractData);
+      setGenomeResult(data.genome);
+      // Convert genome to editable YAML text
+      const yamlText = jsonToYaml(data.genome);
+      setGenomeYaml(yamlText);
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : "Extraction failed");
+      updateExtractStep(0, { status: "error" });
+    }
 
-      // Step 2: Commit to GitHub
-      updatePipeline(3, { status: "running" });
+    setExtracting(false);
+  };
 
-      const commitRes = await fetch("/api/video-genome/commit", {
+  // ---------------------------------------------------------------------------
+  // Step 4: Commit
+  // ---------------------------------------------------------------------------
+
+  const handleCommit = async () => {
+    setCommitting(true);
+    setCommitError(null);
+
+    try {
+      const res = await fetch("/api/video-genome/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          genome: extractData.genome,
+          video_id: videoId,
+          genome: genomeResult,
           application_name: applicationName,
-          integration_id: selectedGithub?.id,
         }),
       });
-      const commitData = await commitRes.json();
-
-      if (commitData.status === "error") {
-        updatePipeline(3, { status: "error", message: commitData.error || "Commit failed" });
-        setPipelineError(commitData.error || "Commit failed");
-        setPipelineRunning(false);
-        return;
+      const data = await res.json();
+      if (data.status === "error") {
+        setCommitError(data.error || "Commit failed");
+      } else {
+        setCommitResult(data);
       }
-
-      updatePipeline(3, { status: "done", message: `${commitData.file_count || 0} files committed` });
-      setCommitResult(commitData);
     } catch (err) {
-      setPipelineError(err instanceof Error ? err.message : "Pipeline failed");
+      setCommitError(err instanceof Error ? err.message : "Commit failed");
     }
 
-    setPipelineRunning(false);
+    setCommitting(false);
   };
 
   // ---------------------------------------------------------------------------
@@ -229,20 +231,27 @@ export default function VideoGenomePage() {
   // ---------------------------------------------------------------------------
 
   const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const genomeStats = (genome: any) => {
+    if (!genome?.genome_document) return "Genome built";
+    const gd = genome.genome_document;
+    return `${gd.objects?.length || 0} objects, ${gd.fields?.length || 0} fields, ${gd.workflows?.length || 0} workflows`;
+  };
+
+  const jsonToYaml = (obj: any, indent = 0): string => {
+    // Simple JSON-to-readable-text for review (not full YAML, just readable)
+    return JSON.stringify(obj, null, 2);
   };
 
   const canAdvance = () => {
     if (step === 1) return !!videoId;
     if (step === 2) return !!selectedGithub && applicationName.trim().length > 0;
+    if (step === 3) return !!genomeResult;
     return false;
   };
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
@@ -262,7 +271,7 @@ export default function VideoGenomePage() {
         {WIZARD_STEPS.map((ws, idx) => (
           <div key={ws.id} className="flex items-center gap-2">
             <div
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 step === ws.id
                   ? "bg-orange-100 text-orange-700 border border-orange-200"
                   : step > ws.id
@@ -271,16 +280,16 @@ export default function VideoGenomePage() {
               }`}
             >
               {step > ws.id ? (
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
               ) : (
-                <span className="w-5 h-5 rounded-full bg-white flex items-center justify-center text-xs border border-current">
+                <span className="w-4 h-4 rounded-full bg-white flex items-center justify-center text-[10px] border border-current">
                   {ws.id}
                 </span>
               )}
               {ws.label}
             </div>
             {idx < WIZARD_STEPS.length - 1 && (
-              <div className={`w-8 h-px ${step > ws.id ? "bg-green-300" : "bg-gray-200"}`} />
+              <div className={`w-6 h-px ${step > ws.id ? "bg-green-300" : "bg-gray-200"}`} />
             )}
           </div>
         ))}
@@ -302,22 +311,15 @@ export default function VideoGenomePage() {
               >
                 <Video className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-600 font-medium">Click to select a video file</p>
-                <p className="text-xs text-gray-400 mt-1">Accepts .mp4, .mov, .webm</p>
+                <p className="text-xs text-gray-400 mt-1">Accepts .mp4, .mov, .webm (up to 500 MB)</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Video preview */}
                 {videoUrl && (
                   <div className="rounded-xl overflow-hidden border border-gray-200 bg-black">
-                    <video
-                      src={videoUrl}
-                      controls
-                      className="w-full max-h-[360px] object-contain"
-                    />
+                    <video src={videoUrl} controls className="w-full max-h-[360px] object-contain" />
                   </div>
                 )}
-
-                {/* File info */}
                 <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
                   <div className="flex items-center gap-3">
                     <FileText className="w-5 h-5 text-orange-500" />
@@ -333,68 +335,34 @@ export default function VideoGenomePage() {
                         Uploaded
                       </span>
                     ) : (
-                      <button
-                        onClick={handleUpload}
-                        disabled={uploading}
-                        className="px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {uploading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Uploading...
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4" />
-                            Upload
-                          </>
-                        )}
+                      <button onClick={handleUpload} disabled={uploading}
+                        className="px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:opacity-50 flex items-center gap-2">
+                        {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</> : <><Upload className="w-4 h-4" /> Upload</>}
                       </button>
                     )}
-                    <button
-                      onClick={() => {
-                        setVideoFile(null);
-                        setVideoUrl(null);
-                        setVideoId(null);
-                      }}
-                      className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700"
-                    >
-                      Change
-                    </button>
+                    <button onClick={() => { setVideoFile(null); setVideoUrl(null); setVideoId(null); }}
+                      className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Change</button>
                   </div>
                 </div>
-
                 {uploadError && (
-                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    {uploadError}
+                  <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{uploadError}</span>
                   </div>
                 )}
               </div>
             )}
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".mp4,.mov,.webm"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
+            <input ref={fileInputRef} type="file" accept=".mp4,.mov,.webm" className="hidden" onChange={handleFileSelect} />
           </div>
 
           {/* Notes */}
           <div className="bg-white border border-gray-200 rounded-2xl p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-2">Notes (optional)</h3>
-            <p className="text-xs text-gray-500 mb-3">
-              Provide any context about the software shown in the video — application name, vendor, purpose, etc.
-            </p>
-            <textarea
-              value={userNotes}
-              onChange={(e) => setUserNotes(e.target.value)}
+            <p className="text-xs text-gray-500 mb-3">Provide context about the software shown in the video.</p>
+            <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)}
               placeholder="e.g. This is a walkthrough of the ServiceNow ITSM module showing incident management workflows..."
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300 resize-none"
-              rows={3}
-            />
+              rows={3} />
           </div>
         </div>
       )}
@@ -407,39 +375,31 @@ export default function VideoGenomePage() {
               <GitBranch className="w-5 h-5 text-orange-500" />
               Select GitHub Repository
             </h2>
-
             {loadingIntegrations ? (
               <div className="flex items-center justify-center py-12 text-gray-400">
-                <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                Loading integrations...
+                <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading integrations...
               </div>
             ) : integrations.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
                 <GitBranch className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No GitHub integrations found.</p>
-                <p className="text-xs mt-1">Configure a GitHub integration first.</p>
+                <p className="text-xs mt-1">Configure a GitHub integration in Settings first.</p>
               </div>
             ) : (
               <div className="grid gap-3">
                 {integrations.map((intg) => {
                   const selected = selectedGithub?.id === intg.id;
-                  const repoName = intg.config?.repo || intg.config?.repository || intg.name;
                   return (
-                    <button
-                      key={intg.id}
-                      onClick={() => setSelectedGithub(intg)}
+                    <button key={intg.id} onClick={() => setSelectedGithub(intg)}
                       className={`flex items-center gap-4 px-4 py-3 rounded-xl border-2 transition-all text-left ${
-                        selected
-                          ? "border-orange-400 bg-orange-50"
-                          : "border-gray-200 hover:border-gray-300 bg-white"
-                      }`}
-                    >
+                        selected ? "border-orange-400 bg-orange-50" : "border-gray-200 hover:border-gray-300 bg-white"
+                      }`}>
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${selected ? "bg-orange-100" : "bg-gray-100"}`}>
                         <GitBranch className={`w-5 h-5 ${selected ? "text-orange-600" : "text-gray-500"}`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900">{intg.name}</p>
-                        <p className="text-xs text-gray-500 truncate">{repoName}</p>
+                        <p className="text-xs text-gray-500 truncate">{intg.config?.default_repository || intg.config?.org || ""}</p>
                       </div>
                       {selected && <CheckCircle2 className="w-5 h-5 text-orange-500 flex-shrink-0" />}
                     </button>
@@ -448,25 +408,17 @@ export default function VideoGenomePage() {
               </div>
             )}
           </div>
-
-          {/* Application Name */}
           <div className="bg-white border border-gray-200 rounded-2xl p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-2">Application Name</h3>
-            <p className="text-xs text-gray-500 mb-3">
-              Name of the application being captured (used for folder structure in the repo).
-            </p>
-            <input
-              type="text"
-              value={applicationName}
-              onChange={(e) => setApplicationName(e.target.value)}
+            <p className="text-xs text-gray-500 mb-3">Name for the genome folder structure in the repository.</p>
+            <input type="text" value={applicationName} onChange={(e) => setApplicationName(e.target.value)}
               placeholder="e.g. ServiceNow ITSM"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300"
-            />
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300" />
           </div>
         </div>
       )}
 
-      {/* Step 3: Extract & Commit */}
+      {/* Step 3: Extract Genome */}
       {step === 3 && (
         <div className="space-y-6">
           <div className="bg-white border border-gray-200 rounded-2xl p-6">
@@ -475,161 +427,200 @@ export default function VideoGenomePage() {
               Extract Genome
             </h2>
 
-            {/* Summary of selections */}
+            {/* Summary */}
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-gray-50 rounded-xl px-4 py-3">
                 <p className="text-xs text-gray-500 mb-1">Video</p>
                 <p className="text-sm font-medium text-gray-900 truncate">{videoFile?.name}</p>
               </div>
               <div className="bg-gray-50 rounded-xl px-4 py-3">
-                <p className="text-xs text-gray-500 mb-1">Target Repo</p>
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {selectedGithub?.config?.repo || selectedGithub?.name}
-                </p>
-              </div>
-              <div className="bg-gray-50 rounded-xl px-4 py-3">
                 <p className="text-xs text-gray-500 mb-1">Application</p>
                 <p className="text-sm font-medium text-gray-900">{applicationName}</p>
               </div>
-              {userNotes && (
-                <div className="bg-gray-50 rounded-xl px-4 py-3">
-                  <p className="text-xs text-gray-500 mb-1">Notes</p>
-                  <p className="text-sm text-gray-700 truncate">{userNotes}</p>
-                </div>
-              )}
             </div>
 
-            {/* Start button */}
-            {!pipelineRunning && !extractResult && (
-              <button
-                onClick={runPipeline}
-                className="w-full py-3 bg-orange-500 text-white font-medium rounded-xl hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
-              >
+            {/* Extract button */}
+            {!extracting && !genomeResult && (
+              <button onClick={runExtraction}
+                className="w-full py-3 bg-orange-500 text-white font-medium rounded-xl hover:bg-orange-600 transition-colors flex items-center justify-center gap-2">
                 <Play className="w-5 h-5" />
                 Extract Genome
               </button>
             )}
 
-            {/* Pipeline steps */}
-            {(pipelineRunning || extractResult || pipelineError) && (
+            {/* Pipeline */}
+            {(extracting || genomeResult || extractError) && (
               <div className="space-y-3 mt-4">
-                {pipeline.map((ps, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
-                      ps.status === "running"
-                        ? "border-orange-200 bg-orange-50"
-                        : ps.status === "done"
-                        ? "border-green-200 bg-green-50"
-                        : ps.status === "error"
-                        ? "border-red-200 bg-red-50"
-                        : "border-gray-200 bg-gray-50"
-                    }`}
-                  >
+                {extractPipeline.map((ps, idx) => (
+                  <div key={idx} className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
+                    ps.status === "running" ? "border-orange-200 bg-orange-50"
+                    : ps.status === "done" ? "border-green-200 bg-green-50"
+                    : ps.status === "error" ? "border-red-200 bg-red-50"
+                    : "border-gray-200 bg-gray-50"
+                  }`}>
                     {ps.status === "running" && <Loader2 className="w-5 h-5 text-orange-500 animate-spin flex-shrink-0" />}
                     {ps.status === "done" && <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />}
                     {ps.status === "error" && <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />}
-                    {ps.status === "idle" && (
-                      <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
+                    {ps.status === "idle" && <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />}
+                    <div className="flex-1">
                       <p className={`text-sm font-medium ${
-                        ps.status === "running" ? "text-orange-700" :
-                        ps.status === "done" ? "text-green-700" :
-                        ps.status === "error" ? "text-red-700" :
-                        "text-gray-400"
-                      }`}>
-                        {ps.label}
-                      </p>
-                      {ps.message && (
-                        <p className="text-xs text-gray-500 mt-0.5">{ps.message}</p>
-                      )}
+                        ps.status === "running" ? "text-orange-700" : ps.status === "done" ? "text-green-700" : ps.status === "error" ? "text-red-700" : "text-gray-400"
+                      }`}>{ps.label}</p>
+                      {ps.message && <p className="text-xs text-gray-500 mt-0.5">{ps.message}</p>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Error */}
-            {pipelineError && !pipelineRunning && (
-              <div className="mt-4 flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                {pipelineError}
+            {extractError && !extracting && (
+              <div className="mt-4 flex items-start gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{extractError}</span>
               </div>
             )}
 
-            {/* Results */}
-            {commitResult && (
-              <div className="mt-6 bg-green-50 border border-green-200 rounded-2xl p-6">
-                <h3 className="text-sm font-semibold text-green-800 mb-4 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5" />
-                  Genome Captured Successfully
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-green-600 mb-0.5">Files Committed</p>
-                    <p className="text-lg font-semibold text-green-900">{commitResult.file_count}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-green-600 mb-0.5">Branch</p>
-                    <p className="text-sm font-medium text-green-900">{commitResult.branch}</p>
-                  </div>
-                  {extractResult && (
-                    <>
-                      <div>
-                        <p className="text-xs text-green-600 mb-0.5">Objects Found</p>
-                        <p className="text-lg font-semibold text-green-900">{extractResult.objects_found || 0}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-green-600 mb-0.5">Fields Found</p>
-                        <p className="text-lg font-semibold text-green-900">{extractResult.fields_found || 0}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-green-600 mb-0.5">Workflows Found</p>
-                        <p className="text-lg font-semibold text-green-900">{extractResult.workflows_found || 0}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-green-600 mb-0.5">Frames Extracted</p>
-                        <p className="text-lg font-semibold text-green-900">{extractResult.frames_extracted || 0}</p>
-                      </div>
-                    </>
-                  )}
+            {/* Extraction result preview */}
+            {genomeResult && !extracting && (
+              <div className="mt-6 bg-green-50 border border-green-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-semibold text-green-800">Genome Extracted</span>
                 </div>
-                {commitResult.repo_url && (
-                  <a
-                    href={commitResult.repo_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    <GitBranch className="w-4 h-4" />
-                    View in GitHub
-                  </a>
-                )}
+                <div className="flex gap-4 text-xs text-green-700">
+                  <span>{genomeResult.genome_document?.objects?.length || 0} objects</span>
+                  <span>{genomeResult.genome_document?.fields?.length || 0} fields</span>
+                  <span>{genomeResult.genome_document?.workflows?.length || 0} workflows</span>
+                  <span>{genomeResult.genome_document?.relationships?.length || 0} relationships</span>
+                </div>
+                <p className="text-xs text-green-600 mt-2">Click Next to review and edit before committing.</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Navigation buttons */}
+      {/* Step 4: Review & Commit */}
+      {step === 4 && (
+        <div className="space-y-6">
+          <div className="bg-white border border-gray-200 rounded-2xl p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Eye className="w-5 h-5 text-orange-500" />
+              Review Extracted Genome
+            </h2>
+
+            {/* Genome stats */}
+            {genomeResult && (
+              <div className="grid grid-cols-4 gap-3 mb-4">
+                {[
+                  { label: "Application", value: genomeResult.application_name || applicationName },
+                  { label: "Vendor", value: genomeResult.vendor || "—" },
+                  { label: "Objects", value: genomeResult.genome_document?.objects?.length || 0 },
+                  { label: "Workflows", value: genomeResult.genome_document?.workflows?.length || 0 },
+                ].map((s, i) => (
+                  <div key={i} className="bg-gray-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-gray-500">{s.label}</p>
+                    <p className="text-sm font-semibold text-gray-900">{s.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Editable genome JSON */}
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+                <Pencil className="w-3 h-3" /> Genome Document (editable)
+              </p>
+              <span className="text-[10px] text-gray-400">{genomeYaml.length} chars</span>
+            </div>
+            <textarea
+              value={genomeYaml}
+              onChange={(e) => {
+                setGenomeYaml(e.target.value);
+                try {
+                  setGenomeResult(JSON.parse(e.target.value));
+                } catch { /* keep old result if invalid */ }
+              }}
+              className="w-full h-80 font-mono text-xs border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300 resize-y bg-gray-50"
+            />
+
+            {/* Summary */}
+            {genomeResult?.summary && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs font-medium text-blue-800 mb-1">AI Summary</p>
+                <p className="text-sm text-blue-700">{genomeResult.summary}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Commit section */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <GitBranch className="w-4 h-4 text-orange-500" />
+              Commit to GitHub
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Commits the genome to <strong>{selectedGithub?.config?.default_repository || selectedGithub?.name}</strong> as <strong>{applicationName}</strong>.
+            </p>
+
+            {commitResult ? (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  <span className="text-sm font-semibold text-green-800">Committed Successfully</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-green-600">Files</p>
+                    <p className="text-lg font-semibold text-green-900">{commitResult.file_count}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-green-600">Files</p>
+                    <div className="text-xs text-green-700 mt-1 space-y-0.5">
+                      {(commitResult.files_pushed || []).slice(0, 8).map((f: string, i: number) => (
+                        <div key={i} className="flex items-center gap-1.5">
+                          <FileText className="w-3 h-3" />
+                          <span className="font-mono truncate">{f.split("/").pop()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {commitResult.repo_url && (
+                  <a href={commitResult.repo_url} target="_blank" rel="noopener noreferrer"
+                    className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700">
+                    <GitBranch className="w-4 h-4" /> View in GitHub
+                  </a>
+                )}
+              </div>
+            ) : (
+              <>
+                <button onClick={handleCommit} disabled={committing || !genomeResult}
+                  className="w-full py-3 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                  {committing ? <><Loader2 className="w-5 h-5 animate-spin" /> Committing...</> : <><Save className="w-5 h-5" /> Commit to GitHub</>}
+                </button>
+                {commitError && (
+                  <div className="mt-3 flex items-start gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{commitError}</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Navigation */}
       <div className="flex items-center justify-between mt-8">
-        <button
-          onClick={() => setStep((s) => Math.max(1, s - 1))}
-          disabled={step === 1}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
+        <button onClick={() => setStep((s) => Math.max(1, s - 1))} disabled={step === 1 || committing}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed">
+          <ArrowLeft className="w-4 h-4" /> Back
         </button>
-        {step < 3 && (
-          <button
-            onClick={() => setStep((s) => Math.min(3, s + 1))}
-            disabled={!canAdvance()}
-            className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-xl hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Next
-            <ArrowRight className="w-4 h-4" />
+        {step < 4 && (
+          <button onClick={() => setStep((s) => Math.min(4, s + 1))} disabled={!canAdvance()}
+            className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-xl hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            Next <ArrowRight className="w-4 h-4" />
           </button>
         )}
       </div>
