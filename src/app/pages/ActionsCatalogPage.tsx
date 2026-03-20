@@ -82,7 +82,7 @@ export default function ActionsCatalogPage() {
             </Link>
             <Link
               to="/actions/create"
-              className="flex items-center gap-2 px-4 py-2 bg-[#030213] text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />
               Create Action

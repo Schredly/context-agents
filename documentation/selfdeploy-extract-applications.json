@@ -1,0 +1,1324 @@
+{
+    "result": {
+        "status": "success",
+        "count": 188.0,
+        "applications": [
+            {
+                "sys_id": "21d5e77677171110638cfe21fe5a993c",
+                "name": "Access Analyzer",
+                "scope": "sn_access_analyzer",
+                "version": "4.0.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "1163fa730f102010e8c940c1df767e8c",
+                "name": "Admin Center",
+                "scope": "sn_admin_center",
+                "version": "4.2.5",
+                "vendor": null
+            },
+            {
+                "sys_id": "39eca3e2ff210110f416d018d53bf16e",
+                "name": "Adoption Blueprint for Technology Excellence",
+                "scope": "sn_itsm_bus_obj",
+                "version": "1.4.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "f9a0de22c7022010d447c17cf4c260ea",
+                "name": "AES Flow Templates",
+                "scope": "sn_aes_flow_templa",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "7ebe6d1d7c01301042ca6b61aa27d65a",
+                "name": "AES Mobile Templates",
+                "scope": "sn_aes_mobile",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "9262a139c39020100bf442583c40dd87",
+                "name": "AES Portal UI Template",
+                "scope": "sn_portal_starte_0",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "8df4249253123010fe92ddeeff7b120e",
+                "name": "AES Role Builder",
+                "scope": "sn_role_builder",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "a7caf0e3731020104cb09434c4f6a741",
+                "name": "AES Workspace UI Template",
+                "scope": "sn_workspace_sta_0",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "da8f2ef273232300e64cc1f52ff6a78f",
+                "name": "Agent Assist Recommendation",
+                "scope": "sn_agent_recommend",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "2b3a837a0bb732007a0e41d6f6673a7f",
+                "name": "Agent Workspace",
+                "scope": "sn_agent_workspace",
+                "version": "25.0.3",
+                "vendor": null
+            },
+            {
+                "sys_id": "3c467b5f0bf130109e0fa4e6e9c4c946",
+                "name": "AI Search For Next Experience",
+                "scope": "sn_aisearch_global",
+                "version": "4.1.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "4cb87f6f53703010b846ddeeff7b1289",
+                "name": "App Engine Notifications",
+                "scope": "sn_app_eng_notify",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "e046257545b47c84712b8779a9abd0cb",
+                "name": "App Engine Studio",
+                "scope": "sn_app_eng_studio",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "3d3c2505c3e22010b83971e54440dd75",
+                "name": "Application Intake",
+                "scope": "sn_app_intake",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "fe12f0f077232300454792718a106192",
+                "name": "Asset Management for mobile",
+                "scope": "sn_me_assets",
+                "version": "26.4.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "54b90b435d70f410f87728dca52fcfea",
+                "name": "Asset Management Workspace",
+                "scope": "sn_itam_workspace",
+                "version": "7.999.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "4d8039d0533130106b86ddeeff7b128b",
+                "name": "Asset Management Workspace - Recommendations",
+                "scope": "sn_itam_recomm",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "3ad18693db92220004997878f0b8f516",
+                "name": "Benchmark Client",
+                "scope": "sn_bm_client",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "1bc6c2d3db92220004997878f0b8f571",
+                "name": "Benchmark Common",
+                "scope": "sn_bm_common",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "8bc07a7f8cab405aa66fae7bef3245f5",
+                "name": "Build Agent (Trial)",
+                "scope": "sn_try_build_agent",
+                "version": "1.3.17",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "6a9ea833b763330088d9bc78ee11a90d",
+                "name": "Business Roles",
+                "scope": "sn_businessroles",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "59b923e3b770230098f7da23ee11a999",
+                "name": "Change Management - Approval Policy",
+                "scope": "sn_chg_pol_appr",
+                "version": "3.0.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "649270d153131300e321ddeeff7b120e",
+                "name": "Change Management - ATF",
+                "scope": "sn_change_atf",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "18351d53eb32120034d1eeea1206fe79",
+                "name": "Change Management - CAB Workbench",
+                "scope": "sn_change_cab",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "bb9f15345332101034d1ddeeff7b12c8",
+                "name": "Change Management - Change Models Landing",
+                "scope": "sn_chg_model_ui",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "cdcf033467020300b410afa00585ef2b",
+                "name": "Change Management - Change Schedule",
+                "scope": "sn_chg_soc",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "1ae06f355710130034d169202d94f92e",
+                "name": "Change Management - Color Picker",
+                "scope": "sn_chg_soc_cp",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "362aa454b740230096c3e4f6ee11a946",
+                "name": "Change Management - REST API",
+                "scope": "sn_chg_rest",
+                "version": "26.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "bccbdbb023213010785ddc1756bf6579",
+                "name": "Change Management for Service Operations Workspace",
+                "scope": "sn_sow_chg",
+                "version": "7.1.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "30f13c8d53521010af5addeeff7b121d",
+                "name": "CI Guided Setup",
+                "scope": "sn_ci_gs_content",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "c2a7835187123010a4a2c077f6cb0bc0",
+                "name": "CI Landing Experience",
+                "scope": "sn_ci_landing_exp",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "31774a2953839110a6f8ddeeff7b12cb",
+                "name": "Clone Admin Console",
+                "scope": "sn_instance_clone",
+                "version": "2.0.2",
+                "vendor": null
+            },
+            {
+                "sys_id": "230016d573131300ee4dd3c72bf6a7cd",
+                "name": "CMDB Agent Workspace",
+                "scope": "sn_cmdb_workspace",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "f6ad5d41c3222010a9f5e548fa40dd69",
+                "name": "Collaboration Request",
+                "scope": "sn_collab_request",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "fa27a0dd53423010bf68ddeeff7b12ac",
+                "name": "Collaboration Services for Service Operations Workspace",
+                "scope": "sn_sow_collab",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "e44100732ce74110f8771fb93f5c7ccd",
+                "name": "Common Guidances",
+                "scope": "sn_guidances",
+                "version": "9.0.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "4d3530700f3110107d20409dc4767e42",
+                "name": "Common Page Templates",
+                "scope": "sn_uib_base_aw",
+                "version": "27.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "116703c19f200300af7196fcc67fcf17",
+                "name": "Connect Spoke",
+                "scope": "sn_connect_ah",
+                "version": "1.0.11",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "7dbf5fb177733110b603ebeaae5a9980",
+                "name": "Content Engagement for Employee Center Pro",
+                "scope": "sn_ce",
+                "version": "1.3.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "bde72a4753710300d901a7e6a11c0838",
+                "name": "Content Experiences",
+                "scope": "sn_ca",
+                "version": "32.1.12",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "b26210490b7203008cd6e7ae37673a6a",
+                "name": "Content Publishing",
+                "scope": "sn_cd",
+                "version": "35.0.24",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "a6c104e2b3133200f7d1a13816a8dc64",
+                "name": "Conversation Builder",
+                "scope": "sn_cs_builder",
+                "version": "29.0.4",
+                "vendor": null
+            },
+            {
+                "sys_id": "434a64fd531db410f738ddeeff7b12c7",
+                "name": "Conversational Interfaces - Diagnostics",
+                "scope": "sn_ci_diagnostics",
+                "version": "2.2.1",
+                "vendor": null
+            },
+            {
+                "sys_id": "af015d08ff7826103979ffffffffff4a",
+                "name": "Creator Studio Configurations",
+                "scope": "sn_crs_config",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "d9a0919b73a65010d133bd49faf6a7fc",
+                "name": "CSM Configurable Workspace Special Handling Notes",
+                "scope": "sn_uib_shn",
+                "version": "22.1.1",
+                "vendor": null
+            },
+            {
+                "sys_id": "bb67ed7253e83010b846ddeeff7b1204",
+                "name": "Deployment Pipeline",
+                "scope": "sn_deploy_pipeline",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "1cf7ad026abf3abab12e761ddaa6e9df",
+                "name": "Diagram Builder",
+                "scope": "sn_diagram_builder",
+                "version": "28.1.1",
+                "vendor": null
+            },
+            {
+                "sys_id": "12287edb537c301037daddeeff7b12cf",
+                "name": "Digital Signature API",
+                "scope": "sn_ds_api",
+                "version": "26.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "dcb0e1e4db075300dd14596e5e9619ca",
+                "name": "Docker Spoke",
+                "scope": "sn_docker_spoke",
+                "version": "2.3.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "570d7fd277312010cb5bb73aba1061e8",
+                "name": "Document Approval App Template",
+                "scope": "sn_document_appr_0",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "4b2d950b87c220109bada7da0acb0baa",
+                "name": "Dynamic Related Records for Configurable Workspace",
+                "scope": "sn_uib_dyn_rel_rec",
+                "version": "25.4.4",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "52bf58b1b703230088d9bc78ee11a987",
+                "name": "E-Signature",
+                "scope": "sn_esign",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "a77e3ede4df92010f87774ecf02d44f3",
+                "name": "Emergency Alert App Template",
+                "scope": "sn_emrgncy_tmp",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "4249e63a28d54d61bb6fbf61fd86cccb",
+                "name": "Employee Center",
+                "scope": "sn_ex_sp",
+                "version": "37.1.10",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "3d1da2705b021200a4656ede91f91ab6",
+                "name": "Employee Center Core",
+                "scope": "sn_hr_sp",
+                "version": "37.1.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "236addd4d75048c1a5f250d73c064976",
+                "name": "Employee Center Pro",
+                "scope": "sn_ex_sp_pro",
+                "version": "35.1.5",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "4f1782b511863010d3c9cf6239244623",
+                "name": "Employee Experience Foundation",
+                "scope": "sn_ex_emp_fd",
+                "version": "29.2.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "9f678ed6c3003010069aec4b7d40ddba",
+                "name": "Employee experience taxonomy",
+                "scope": "sn_ect",
+                "version": "28.1.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "1e95bac2738f001001b566b90ff6a7cd",
+                "name": "Employee Profile",
+                "scope": "sn_employee",
+                "version": "13.2.5",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "dc1fcaa2c3032200f7d1ca3adfba8f1a",
+                "name": "Enhanced Global Search UI",
+                "scope": "sn_global_searchui",
+                "version": "5.0.6",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "08ca765153ed5010a86dddeeff7b1277",
+                "name": "Enterprise Service Management Integrations Framework",
+                "scope": "sn_hr_integr_fw",
+                "version": "3.8.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "f8bf04dec32520102920b8889d40dd4b",
+                "name": "Evidence Management",
+                "scope": "sn_em",
+                "version": "19.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "1872ee045b100110ab933520b881c727",
+                "name": "FDIH Dashboard",
+                "scope": "sn_fdih_dashboards",
+                "version": "25.0.5",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "d316505953eb0210f69cddeeff7b12b8",
+                "name": "Flow Encryption",
+                "scope": "sn_flow_encryption",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "49d1d428e73233005765eef6c2f6a9eb",
+                "name": "Generic Collection Framework",
+                "scope": "sn_generic_collect",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "f7a9b29353620010dda1ddeeff7b1252",
+                "name": "Glide Signals JS Package",
+                "scope": "sn_sn_signals_js_s",
+                "version": "19.0.2",
+                "vendor": null
+            },
+            {
+                "sys_id": "11879041532030103913ddeeff7b12d8",
+                "name": "Goal Framework",
+                "scope": "sn_gf",
+                "version": "4.9.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "fd76ed5a3b570010119c870044efc470",
+                "name": "Guided Decisions - Guidance",
+                "scope": "sn_gd_guidance",
+                "version": "36.0.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "1cb77a801b9af01039c155f3604bcb9e",
+                "name": "Guided Setup",
+                "scope": "sn_ads_setup",
+                "version": "5.0.4",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "5f4ef4ed9f401200b18a7feea57fcfbe",
+                "name": "Guided Setup - Legacy",
+                "scope": "sn_guided_setup",
+                "version": "1.0.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "34de1cc81bd6d010e5dcea08bc4bcbe3",
+                "name": "Guided Setup Configuration",
+                "scope": "sn_gs_config",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "97515a49134b5200ed373d62f244b04a",
+                "name": "Guided Tour Designer",
+                "scope": "sn_tourbuilder",
+                "version": "18.0.5",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "c8585b0b413a6300964f47790d3ec577",
+                "name": "HR Service Delivery for mobile",
+                "scope": "sn_hr_mobile",
+                "version": "21.2.7",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "f072a9bdff771210e2c1ffffffffff80",
+                "name": "HRSD Licensing",
+                "scope": "sn_hr_lm",
+                "version": "1.0.3",
+                "vendor": null
+            },
+            {
+                "sys_id": "a249ead6c3310110d0e1ac8b8640ddf0",
+                "name": "Human Resources Service Delivery Integration with Workday Learning",
+                "scope": "sn_lrn_workday",
+                "version": "1.4.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "d4ac3fff5b311200a4656ede91f91af2",
+                "name": "Human Resources: Core",
+                "scope": "sn_hr_core",
+                "version": "19.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "0fcd4ba63b910010d901655593efc4fd",
+                "name": "Human Resources: Employee Relations",
+                "scope": "sn_hr_er",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "aaa655c19f0322003be01050a57fcf65",
+                "name": "Human Resources: Integrations",
+                "scope": "sn_hr_integrations",
+                "version": "19.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "ee724b063b223300d901655593efc4f3",
+                "name": "Human Resources: Lifecycle Enterprise",
+                "scope": "sn_hr_le_ent",
+                "version": "19.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "532da270dad21200a4656ede91f9331e",
+                "name": "Human Resources: Lifecycle Events",
+                "scope": "sn_hr_le",
+                "version": "19.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "ebe42450739b13005754660c4cf6a7b1",
+                "name": "Incident ATF Test",
+                "scope": "sn_incident_atf",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "bff4c55553ecf110b256ddeeff7b128d",
+                "name": "Incident Communications Management for Service Operations Workspace",
+                "scope": "sn_sow_icm",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "49aff4bb733320103e366238edf6a70f",
+                "name": "Incident Management for Service Operations Workspace",
+                "scope": "sn_sow_inc",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "47b2ca6053983010ff67ddeeff7b12bd",
+                "name": "Interaction Management for Service Operations Workspace",
+                "scope": "sn_sow_interaction",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "db8388700b0330106237818393673a16",
+                "name": "Interceptor UI for Service Operations Workspace",
+                "scope": "sn_sow_interceptor",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "0e9a15cc4320861016817a372ab8f2de",
+                "name": "ITSM Analytics",
+                "scope": "sn_itsm_analytics",
+                "version": "3.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "a08206c85370330083f3ddeeff7b123a",
+                "name": "ITSM Landing Pages",
+                "scope": "sn_itsm_landing",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "7f1c13c0731103005e7d234ffff6a7da",
+                "name": "ITSM Spoke",
+                "scope": "sn_itsm_spoke",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "06e4ef0d87130300ada4046787cb0b08",
+                "name": "ITSM Workspace",
+                "scope": "sn_itsm_workspace",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "69b1da7e45311410f87746a114805d2d",
+                "name": "Knowledge Capabilities in UI Builder",
+                "scope": "sn_km_uib",
+                "version": "29.4.4",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "48e5dbcb9f6f1210ecf142a4ba0a1c84",
+                "name": "Knowledge Center",
+                "scope": "sn_km_center",
+                "version": "31.0.8",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "21ea9ae47301230083511c86fbf6a71d",
+                "name": "Knowledge Management - Guided Setup",
+                "scope": "sn_km_guided_setup",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "bab6dea3db20320099f93691f0b8f590",
+                "name": "Knowledge Management - Service Portal",
+                "scope": "sn_km_portal",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "d9350714c3300110a6f3f97c9840dd3b",
+                "name": "Knowledge Overview",
+                "scope": "sn_kb_overview",
+                "version": "28.0.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "288533960f062010ff5ac8337a767ecb",
+                "name": "Learning Core",
+                "scope": "sn_lc",
+                "version": "9.7.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "78ea8c925312211039ddddeeff7b122f",
+                "name": "Major Incident Management for Service Operations Workspace",
+                "scope": "sn_sow_mim",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "4208aef477331110045b526faa106102",
+                "name": "Manage Skills Configurable Page",
+                "scope": "sn_skill_cfg_page",
+                "version": "1.1.12",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "916bf4019fd1121073fd946eda0a1c69",
+                "name": "Meeting CAB",
+                "scope": "sn_mtg_cab",
+                "version": "1.0.7",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "2b609340fd949f5c8a55925ecaa691e4",
+                "name": "Meeting Watcher - UI Builder Data Resource",
+                "scope": "sn_mtg_watcher",
+                "version": "1.0.9",
+                "vendor": null
+            },
+            {
+                "sys_id": "21f30bcdb7d03300d1dcf8b8ee11a9eb",
+                "name": "ML UI",
+                "scope": "sn_ml_ui",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "fcd931e7c7733300c59db91703c2602f",
+                "name": "NLU Common Model",
+                "scope": "sn_nlu_comm_model",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "00349185770223005d7b3882a910619d",
+                "name": "NLU Studio",
+                "scope": "sn_nlu_studio",
+                "version": "2.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "c43214c1fb101a1055d3f67465efdc21",
+                "name": "Notification Dashboard",
+                "scope": "sn_notif_dashboard",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "f118cb7193478210591c34a86cba104c",
+                "name": "Notifications for Employee Center",
+                "scope": "sn_ex_sp_notifs",
+                "version": "1.2.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "fd42a0b9eba16110ca5583402a5228f7",
+                "name": "Notify UI Components for Configurable Workspaces",
+                "scope": "sn_uib_notify",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "7c395aaa53003110453cddeeff7b123c",
+                "name": "Now Assist Admin Console",
+                "scope": "sn_nowassist_admin",
+                "version": "6.0.12",
+                "vendor": null
+            },
+            {
+                "sys_id": "757c34719bf7f10c4a1f9fe81ba8bba3",
+                "name": "Now Assist context menu",
+                "scope": "sn_wwna",
+                "version": "1.2.10",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "5b8602a8326c2df4500e7405b5e7aced",
+                "name": "Now Assist Core",
+                "scope": "now_assist_core",
+                "version": "28.6.6",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "7b67ecf7437042105947644c7ab8f21b",
+                "name": "Now Assist Troubleshooting",
+                "scope": "sn_nowassist_diagn",
+                "version": "4.0.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "99998d22732130107d804c9885f6a7b6",
+                "name": "Now Experience Analytics",
+                "scope": "sn_now_analytics",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "5cfbdaac77eb2300454792718a106157",
+                "name": "Now Mobile",
+                "scope": "sn_me",
+                "version": "29.3.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "53b1b0e79761011018b2fa98c253afcc",
+                "name": "Omni-Experience Standard Feature Set",
+                "scope": "sn_oe_sfs",
+                "version": "7.0.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "7e3c2481539260100c54ddeeff7b127b",
+                "name": "On Call Scheduling for Service Operations Workspace",
+                "scope": "sn_sow_on_call",
+                "version": "7.1.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "d8eae75e53603010532cddeeff7b121f",
+                "name": "On-Call - Mobile Push Notifications",
+                "scope": "sn_on_call_m_notif",
+                "version": "27.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "7d5488e85342211039ddddeeff7b1229",
+                "name": "On-Call UI Components for Configurable Workspaces",
+                "scope": "sn_uib_on_call",
+                "version": "7.1.4",
+                "vendor": null
+            },
+            {
+                "sys_id": "1fce1c6473ab101021461f477bf6a771",
+                "name": "Openframe Integration App",
+                "scope": "sn_openframe_intg",
+                "version": "28.0.13",
+                "vendor": null
+            },
+            {
+                "sys_id": "2cc75fa8470031101ea871dc416d433c",
+                "name": "PAR CoreUI Migration Scripts",
+                "scope": "sn_par_cor_mig_spt",
+                "version": "3.0.4",
+                "vendor": null
+            },
+            {
+                "sys_id": "61a9cb3ddb162300314873568c9619bf",
+                "name": "Password Reset flows",
+                "scope": "sn_pwdreset_ah",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "d873c7de9310421077d0ca32b3891884",
+                "name": "Password Reset for Service Operations Workspace",
+                "scope": "sn_sow_pwd_reset",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "75a67dbd9350021077d0ca32b38918b3",
+                "name": "Password Reset UI components for Configurable Workspaces",
+                "scope": "sn_uib_pwd_reset",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "b2881e900b3003001e684ac3b6673a93",
+                "name": "Performance Analytics - Diagnostics",
+                "scope": "sn_pa_diagnostics",
+                "version": "20.0.6",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "1c3f9f936741030032468aaad485efda",
+                "name": "Performance Analytics - Enhanced UI",
+                "scope": "sn_pa_ui",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "91256a9899862010f8779b076766f4fb",
+                "name": "Performance Appraisal App Template",
+                "scope": "sn_performanc_0",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "513b0006c3610110f2ace0dd9740dd12",
+                "name": "Platform Analytics",
+                "scope": "sn_app_analytics_w",
+                "version": "7.0.7",
+                "vendor": null
+            },
+            {
+                "sys_id": "8c524e101b6e0010affd0e55cc4bcbed",
+                "name": "Playbook Experience",
+                "scope": "sn_playbook_exp",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "ead9fb5f8b27a051aa71b35163745b82",
+                "name": "Polaris app shell",
+                "scope": "polaris_app_shell",
+                "version": "28.6.2",
+                "vendor": null
+            },
+            {
+                "sys_id": "e9276da055525110f87724327a36ce96",
+                "name": "Portal Next Experience Theme",
+                "scope": "sn_sppolaris_theme",
+                "version": "24.0.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "8d3d2fff77702300db1a2191a910610d",
+                "name": "Problem ATF Tests",
+                "scope": "sn_problem_atf",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "54a81ee10b11301039dd818393673a5c",
+                "name": "Problem Management for Service Operations Workspace",
+                "scope": "sn_sow_problem",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "05bf96091b2245107cc3ec26b04bcb73",
+                "name": "Process Automation Content",
+                "scope": "sn_pad_content",
+                "version": "27.0.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "885d9eb1db6710104fcdebca13961927",
+                "name": "Process Mining",
+                "scope": "sn_po",
+                "version": "28.9.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "7cf63d7eb7333010b288bc16de11a94f",
+                "name": "Quick links component for Service Operations Workspace",
+                "scope": "sn_sow_quick_links",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "427fe83177221010d7159b71a91061e1",
+                "name": "Recommended Actions",
+                "scope": "sn_nb_action",
+                "version": "36.0.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "b49916aff4f50a107d41bb28e786c2f6",
+                "name": "Recommended Actions for ITSM",
+                "scope": "sn_itsm_ra",
+                "version": "3.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "3552a6ee392fa110740d28303df22c0a",
+                "name": "Record lookup connected component",
+                "scope": "sn_record_lookup",
+                "version": "27.1.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "c72e8e76c1fcf010f877e1de0b6be358",
+                "name": "Record Page for Service Operations Workspace",
+                "scope": "sn_sow_record",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "b6278788c342111082c603db7940dd4f",
+                "name": "Record Page Resources",
+                "scope": "sn_record_page",
+                "version": "28.4.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "92b71bd7d5b20010fa9ba060b13e8884",
+                "name": "Remote Directory Sync",
+                "scope": "sn_remote_dir_sync",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "ff5e8e53c3a53010965e070e9140ddb2",
+                "name": "Request Management for Service Operations Workspace",
+                "scope": "sn_sow_req",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "9a31657653373200e8960ef5d5dc34d5",
+                "name": "Schedule Pages",
+                "scope": "sn_schedule_pages",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "b3f3303477232300454792718a1061df",
+                "name": "Search Configurations for mobile",
+                "scope": "sn_me_search",
+                "version": "29.0.7",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "a51d46e3f2014110366b10017c5ba675",
+                "name": "Security Center",
+                "scope": "sn_vsc",
+                "version": "3.0.5",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "d9e3e1d773e7001036fe41244ef6a75c",
+                "name": "Self-Service Analytics Core",
+                "scope": "sn_ssa_core",
+                "version": "28.0.3",
+                "vendor": null
+            },
+            {
+                "sys_id": "894b7538c71320105901a1e603c260ac",
+                "name": "Service Catalog - Service Fulfillment Step Types",
+                "scope": "sn_sc_step_types",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "0097719c3b0203008ed00d8044efc478",
+                "name": "Service Catalog - Service Workspace",
+                "scope": "sn_sc_workspace",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "e92e72c9b7021010e54deb56ee11a9bf",
+                "name": "Service Catalog Builder",
+                "scope": "sn_catalog_builder",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "2263a68187032300e0ef0cf888cb0b3f",
+                "name": "Service Catalog for mobile",
+                "scope": "sn_scmobile",
+                "version": "29.0.7",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "6e70d1f5c32302006f333b0ac3d3ae7b",
+                "name": "Service Catalog REST API",
+                "scope": "sn_sc",
+                "version": "1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "65b48e35b76233004fbc2089ee11a99a",
+                "name": "Service Level Management - ATF",
+                "scope": "sn_slm_atf",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "6c11c4f357201300ff01ac11ac94f982",
+                "name": "Service Level Management - Breakdowns",
+                "scope": "sn_sla_brkdwn",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "76d8e8b253320010a393ddeeff7b127b",
+                "name": "Service Level Management - SLA Timer Config API",
+                "scope": "sn_slm_timer",
+                "version": "26.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "3a7ac58653a330100999ddeeff7b120b",
+                "name": "Service Level Management Experience for Workspace",
+                "scope": "sn_sla",
+                "version": "7.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "c59568fd53ae21104a61ddeeff7b129a",
+                "name": "Service Operations Workspace Admin Center",
+                "scope": "sn_sow_admin",
+                "version": "7.1.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "5ca1bcb3733320103e366238edf6a706",
+                "name": "Service Operations Workspace Core",
+                "scope": "sn_sow",
+                "version": "7.1.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "4d35fc0053b221104a61ddeeff7b1273",
+                "name": "Service Operations Workspace ITSM Admin Center",
+                "scope": "sn_sow_itsm_admin",
+                "version": "7.1.1",
+                "vendor": null
+            },
+            {
+                "sys_id": "d60ef8120c627010f877468eabd9762d",
+                "name": "Service Operations Workspace ITSM Applications",
+                "scope": "sn_sow_itsm_cont",
+                "version": "7.1.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "0eef12637311301045216238edf6a75e",
+                "name": "Service Operations Workspace ITSM Common",
+                "scope": "sn_sow_itsm_common",
+                "version": "7.1.2",
+                "vendor": null
+            },
+            {
+                "sys_id": "c9f1df5787f50010e0ef0cf888cb0b2c",
+                "name": "Service Portal - Standard Ticket",
+                "scope": "sn_std_tkt",
+                "version": "1.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "67ac5062db10220035417878f0b8f5c4",
+                "name": "Service Portal Surveys",
+                "scope": "sn_portal_surveys",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "3214b661c3eb211062ebf69f05013160",
+                "name": "ServiceNow Benchmarks",
+                "scope": "sn_benchmarks",
+                "version": "4.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "b3a70c8a530323004c36ddeeff7b124c",
+                "name": "ServiceNow NowMobile App - Knowledge Management Screens and Launcher Screen",
+                "scope": "sn_km_mr",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "264259f1c30320101e6b79222840ddc7",
+                "name": "ServiceWorker Manager",
+                "scope": "sn_serviceworker_m",
+                "version": "28.0.7",
+                "vendor": null
+            },
+            {
+                "sys_id": "c3354d2f73032300e64cc1f52ff6a7c7",
+                "name": "Similarity Analyzer",
+                "scope": "sn_intel_analyzer",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "26329d35f52d4510f877c32d14052947",
+                "name": "Sitemap Generator",
+                "scope": "sn_ux_seo_sitemap",
+                "version": "1.1.4",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "60cd95f27300130036001f6a7af6a7cb",
+                "name": "sn-custom-tinymce-scoped-app",
+                "scope": "sn_sn_custom_tinym",
+                "version": "28.6.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "3c7aa277cda22110f877fa360f2ed132",
+                "name": "SNC Code Editor",
+                "scope": "sn_code_editor",
+                "version": "1.1.13",
+                "vendor": null
+            },
+            {
+                "sys_id": "eff57735c7322010580d45ece8c26053",
+                "name": "sn_atf_docker",
+                "scope": "sn_atf_docker",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "3cc85c0107303010c7d559bf1ad30022",
+                "name": "Success Dashboard Core",
+                "scope": "sn_sd",
+                "version": "8.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "317b09fb535323002d96ddeeff7b121b",
+                "name": "Surveys for mobile",
+                "scope": "sn_me_survey",
+                "version": "1.0.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "79a52ac9ebb2201005017994a252288b",
+                "name": "Surveys for mobile",
+                "scope": "sn_msc",
+                "version": "1.0.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "74fdcd7a437121109fa864cec7b8f27b",
+                "name": "System Events and Jobs Dashboard",
+                "scope": "sn_async_dashboard",
+                "version": "3.0.7",
+                "vendor": null
+            },
+            {
+                "sys_id": "0fdd6483d72302004f1e82285e61033a",
+                "name": "Targeted Communications",
+                "scope": "sn_publications",
+                "version": "28.0.14",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "0d2383dd53687510b256ddeeff7b12b8",
+                "name": "Task Communications Management UI Components for Configurable Workspaces",
+                "scope": "sn_uib_tcm",
+                "version": "7.1.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "de7820af735f23002204e2596bf6a77d",
+                "name": "Tasks for mobile",
+                "scope": "sn_me_todos",
+                "version": "27.1.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "01ebede3c3212010a3a6ddaa7d40dd94",
+                "name": "Team Contacts App Template",
+                "scope": "sn_team_contacts_0",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "2d3597c80b67320036e62c7885673a43",
+                "name": "Templated Snippets",
+                "scope": "sn_templated_snip",
+                "version": "17.0.0",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "bcf8f2906102e010f877c77d86901d9e",
+                "name": "Time Off Request App Template",
+                "scope": "sn_time_off_t_0",
+                "version": "28.2.1",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "aaa03175b7fd511060aa2f19ce11a9e9",
+                "name": "UX Commons",
+                "scope": "sn_app_ux_commons",
+                "version": "27.0.2",
+                "vendor": null
+            },
+            {
+                "sys_id": "dc87b142f8ef3010f8773a6ab7046c45",
+                "name": "UX Metrics Client",
+                "scope": "sn_uxmetric_client",
+                "version": "0.0.1",
+                "vendor": null
+            },
+            {
+                "sys_id": "a650d4923b201300778f6da0a3efc4c3",
+                "name": "Virtual Agent Service Portal Widgets",
+                "scope": "sn_va_sp_widgets",
+                "version": "2.0.10",
+                "vendor": null
+            },
+            {
+                "sys_id": "0d5bb8b9730303004ab2369f2ef6a737",
+                "name": "Virtual Agent Web Client",
+                "scope": "sn_va_web_client",
+                "version": "28.6.6",
+                "vendor": null
+            },
+            {
+                "sys_id": "9353f56fb33332000abf86d256a8dce9",
+                "name": "Visual Task Board (VTB) Spoke",
+                "scope": "sn_vtb_ah",
+                "version": "1.1.0",
+                "vendor": null
+            },
+            {
+                "sys_id": "2290bab1eb4e3010e0ef83c45e5228b5",
+                "name": "Walk-up Experience for Service Operations Workspace",
+                "scope": "sn_sow_walkup",
+                "version": "7.1.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "77c3f9b48c154de7acbfd5baa3252e7c",
+                "name": "WDF Tokenization",
+                "scope": "sn_wdf_token",
+                "version": "2.0.2",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "0d30eeec77eb2300454792718a106177",
+                "name": "Webviews for mobile",
+                "scope": "sn_me_webview",
+                "version": "35.2.9",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "cb08e377eb9071106fb3951ff15228b8",
+                "name": "Whats New Framework Core",
+                "scope": "sn_wn",
+                "version": "1.2.3",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "d7c12e92c3310110d0e1ac8b8640dd92",
+                "name": "Workday Learning Spoke",
+                "scope": "sn_workday_lrn_spk",
+                "version": "1.1.4",
+                "vendor": "ServiceNow"
+            },
+            {
+                "sys_id": "cb4faa9c0f283300bb57f4a1ff767e0e",
+                "name": "Workspace Core",
+                "scope": "sn_workspace_core",
+                "version": "25.0.1",
+                "vendor": null
+            }
+        ]
+    }
+}

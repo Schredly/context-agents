@@ -1,0 +1,13 @@
+{
+    "result": {
+        "status": "success",
+        "scope": "x_company_app",
+        "objects": {
+            "tables": [],
+            "scripts": [],
+            "business_rules": [],
+            "flows": [],
+            "ui_pages": []
+        }
+    }
+}

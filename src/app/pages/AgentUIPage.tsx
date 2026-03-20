@@ -861,7 +861,7 @@ export default function AgentUIPage() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-[#0B1E2D]">
+    <div className="h-screen flex flex-col bg-white">
       {/* Top Header */}
       <TopBar
         agentName="OverYonder.ai Agent"
@@ -872,20 +872,15 @@ export default function AgentUIPage() {
       {/* Main Content Area - Two Column Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Chat Conversation Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-[#0B1E2D]">
+        <div className="flex-1 flex flex-col min-w-0 bg-white">
           {/* Scrollable chat area */}
           <div className="flex-1 overflow-y-auto px-4 py-4 custom-scrollbar">
             <div className="max-w-3xl mx-auto space-y-4">
               {messages.length === 0 && !isLoading && (
                 <div className="flex items-center justify-center h-full min-h-[300px]">
                   <div className="text-center">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[#102A43] border border-[#2F5F7A] flex items-center justify-center">
-                      <svg className="w-8 h-8 text-[#C7D2DA]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                      </svg>
-                    </div>
-                    <h3 className="text-[#F1F5F9] text-lg font-medium mb-1">Ask the OverYonder.ai Agent</h3>
-                    <p className="text-[#8FA7B5] text-sm">Type a question about your systems, incidents, or documentation</p>
+                    <h3 className="text-gray-900 text-lg font-medium mb-1">Ask the OverYonder.ai Agent</h3>
+                    <p className="text-gray-500 text-sm">Type a question about your systems, incidents, or documentation</p>
                   </div>
                 </div>
               )}
@@ -922,9 +917,9 @@ export default function AgentUIPage() {
                       if (parsed) {
                         return (
                           <>
-                            <p className="text-sm text-[#F1F5F9] leading-relaxed mb-3">{textPart}</p>
-                            <div className="bg-[#0B1E2D] rounded-lg p-3 border border-[#2F5F7A] overflow-auto max-h-[400px] custom-scrollbar">
-                              <pre className="text-xs text-[#8FD6E8] whitespace-pre-wrap font-mono leading-relaxed">{JSON.stringify(parsed, null, 2)}</pre>
+                            <p className="text-sm text-gray-900 leading-relaxed mb-3">{textPart}</p>
+                            <div className="bg-white rounded-lg p-3 border border-gray-200 overflow-auto max-h-[400px] custom-scrollbar">
+                              <pre className="text-xs text-orange-600 whitespace-pre-wrap font-mono leading-relaxed">{JSON.stringify(parsed, null, 2)}</pre>
                             </div>
                           </>
                         );
@@ -935,14 +930,14 @@ export default function AgentUIPage() {
                     try {
                       const fullJson = JSON.parse(cleaned);
                       return (
-                        <div className="bg-[#0B1E2D] rounded-lg p-3 border border-[#2F5F7A] overflow-auto max-h-[400px] custom-scrollbar">
-                          <pre className="text-xs text-[#8FD6E8] whitespace-pre-wrap font-mono leading-relaxed">{JSON.stringify(fullJson, null, 2)}</pre>
+                        <div className="bg-white rounded-lg p-3 border border-gray-200 overflow-auto max-h-[400px] custom-scrollbar">
+                          <pre className="text-xs text-orange-600 whitespace-pre-wrap font-mono leading-relaxed">{JSON.stringify(fullJson, null, 2)}</pre>
                         </div>
                       );
                     } catch { /* not JSON */ }
 
                     // Plain text — render as readable paragraphs
-                    return <p className="text-sm text-[#C7D2DA] whitespace-pre-wrap leading-relaxed">{cleaned}</p>;
+                    return <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{cleaned}</p>;
                   };
 
                   const tryPrettyPrint = (raw: string) => {
@@ -950,19 +945,19 @@ export default function AgentUIPage() {
                   };
 
                   return (
-                    <div key={message.id} className="bg-[#102A43] border border-amber-500/30 rounded-[10px] p-4">
+                    <div key={message.id} className="bg-gray-50 border border-amber-500/30 rounded-[10px] p-4">
                       <div className="flex items-center gap-2 mb-3">
                         <div className="w-2 h-2 rounded-full bg-amber-500" />
                         <span className="text-xs font-medium text-amber-400 uppercase tracking-wider">
                           {message.draftLabel || "Draft Prompt"}
                         </span>
-                        <span className="text-xs text-[#8FA7B5] ml-auto">{message.timestamp}</span>
+                        <span className="text-xs text-gray-500 ml-auto">{message.timestamp}</span>
                       </div>
 
                       {/* Prompt section (editable via refinement) */}
                       {message.catalogData && (
                         <div className="mb-2">
-                          <span className="text-[10px] font-medium text-[#8FA7B5] uppercase tracking-wider">Prompt (editable)</span>
+                          <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Prompt (editable)</span>
                         </div>
                       )}
                       {renderDraftContent(message.content)}
@@ -971,17 +966,17 @@ export default function AgentUIPage() {
                       {message.catalogData && (
                         <div className="mt-4">
                           <div className="mb-2">
-                            <span className="text-[10px] font-medium text-[#8FA7B5] uppercase tracking-wider">Payload (read only)</span>
+                            <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Payload (read only)</span>
                           </div>
-                          <div className="bg-[#0B1E2D] rounded-lg p-3 border border-[#2F5F7A] overflow-auto max-h-[400px] custom-scrollbar">
-                            <pre className="text-xs text-[#8FD6E8] whitespace-pre-wrap font-mono leading-relaxed">
+                          <div className="bg-white rounded-lg p-3 border border-gray-200 overflow-auto max-h-[400px] custom-scrollbar">
+                            <pre className="text-xs text-orange-600 whitespace-pre-wrap font-mono leading-relaxed">
                               {tryPrettyPrint(message.catalogData)}
                             </pre>
                           </div>
                         </div>
                       )}
 
-                      <p className="text-xs text-[#8FA7B5] mt-3">
+                      <p className="text-xs text-gray-500 mt-3">
                         Type feedback below to refine, or click the approve button when ready.
                       </p>
                     </div>
@@ -989,13 +984,13 @@ export default function AgentUIPage() {
                 }
                 if (message.type === "agent-question") {
                   return (
-                    <div key={message.id} className="bg-[#102A43] border border-[#2E86AB]/40 rounded-[10px] p-4">
+                    <div key={message.id} className="bg-gray-50 border border-orange-400/40 rounded-[10px] p-4">
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="w-2 h-2 rounded-full bg-[#2E86AB]" />
-                        <span className="text-xs font-medium text-[#2E86AB] uppercase tracking-wider">Agent</span>
-                        <span className="text-xs text-[#8FA7B5] ml-auto">{message.timestamp}</span>
+                        <div className="w-2 h-2 rounded-full bg-orange-500" />
+                        <span className="text-xs font-medium text-orange-600 uppercase tracking-wider">Agent</span>
+                        <span className="text-xs text-gray-500 ml-auto">{message.timestamp}</span>
                       </div>
-                      <pre className="text-sm text-[#F1F5F9] whitespace-pre-wrap font-sans">{message.result || message.content}</pre>
+                      <pre className="text-sm text-gray-900 whitespace-pre-wrap font-sans">{message.result || message.content}</pre>
                     </div>
                   );
                 }
@@ -1055,8 +1050,8 @@ export default function AgentUIPage() {
               )}
 
               {isLoading && (
-                <div className="flex items-center gap-3 text-[#C7D2DA] py-4">
-                  <div className="w-2 h-2 rounded-full bg-[#2E86AB] animate-pulse" />
+                <div className="flex items-center gap-3 text-gray-600 py-4">
+                  <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
                   <span className="text-sm">{loadingStatus}</span>
                 </div>
               )}
@@ -1086,14 +1081,14 @@ export default function AgentUIPage() {
         </div>
 
         {/* Right: Agent Execution Trace Panel (hidden at narrow viewports / high zoom) */}
-        <div className={`w-96 border-l border-[#2F5F7A] bg-[#0B1E2D] flex flex-col ${narrowViewport ? "hidden" : ""}`}>
+        <div className={`w-96 border-l border-gray-200 bg-white flex flex-col ${narrowViewport ? "hidden" : ""}`}>
           {/* Panel Header */}
-          <div className="px-4 py-3 border-b border-[#2F5F7A]">
-            <h2 className="text-[#F1F5F9] text-sm font-medium flex items-center gap-2">
-              <div className={`w-1.5 h-1.5 rounded-full ${isLoading ? "bg-[#2E86AB] animate-pulse" : "bg-[#59C3C3]"}`} />
+          <div className="px-4 py-3 border-b border-gray-200">
+            <h2 className="text-gray-900 text-sm font-medium flex items-center gap-2">
+              <div className={`w-1.5 h-1.5 rounded-full ${isLoading ? "bg-orange-500 animate-pulse" : "bg-orange-400"}`} />
               Execution Trace
             </h2>
-            <p className="text-xs text-[#8FA7B5] mt-1">
+            <p className="text-xs text-gray-500 mt-1">
               Live agent reasoning and tool execution
             </p>
           </div>
@@ -1102,7 +1097,7 @@ export default function AgentUIPage() {
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar">
             {reasoningSteps.length > 0 && (
               <div>
-                <span className="text-[11px] font-medium text-[#8FA7B5] uppercase tracking-[0.08em] px-1">
+                <span className="text-[11px] font-medium text-gray-500 uppercase tracking-[0.08em] px-1">
                   Reasoning Steps
                 </span>
                 <div className="mt-2">
@@ -1113,7 +1108,7 @@ export default function AgentUIPage() {
 
             {selectedUseCase && (
               <div>
-                <span className="text-[11px] font-medium text-[#8FA7B5] uppercase tracking-[0.08em] px-1">
+                <span className="text-[11px] font-medium text-gray-500 uppercase tracking-[0.08em] px-1">
                   Selected Use Case
                 </span>
                 <div className="mt-2">
@@ -1129,7 +1124,7 @@ export default function AgentUIPage() {
 
             {skillExecutions.length > 0 && (
               <div>
-                <span className="text-[11px] font-medium text-[#8FA7B5] uppercase tracking-[0.08em] px-1">
+                <span className="text-[11px] font-medium text-gray-500 uppercase tracking-[0.08em] px-1">
                   Skills Executed
                 </span>
                 <div className="mt-2">
@@ -1140,7 +1135,7 @@ export default function AgentUIPage() {
 
             {toolCalls.length > 0 && (
               <div>
-                <span className="text-[11px] font-medium text-[#8FA7B5] uppercase tracking-[0.08em] px-1">
+                <span className="text-[11px] font-medium text-gray-500 uppercase tracking-[0.08em] px-1">
                   Tools & APIs
                 </span>
                 <div className="mt-2">
@@ -1152,13 +1147,13 @@ export default function AgentUIPage() {
             {!reasoningSteps.length && !isLoading && (
               <div className="flex items-center justify-center h-full text-center py-12">
                 <div>
-                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[#102A43] border border-[#2F5F7A] flex items-center justify-center">
-                    <svg className="w-6 h-6 text-[#8FA7B5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                   </div>
-                  <p className="text-[#8FA7B5] text-sm">No execution trace yet</p>
-                  <p className="text-[#8FA7B5] text-xs mt-1">Ask a question to see the agent work</p>
+                  <p className="text-gray-500 text-sm">No execution trace yet</p>
+                  <p className="text-gray-500 text-xs mt-1">Ask a question to see the agent work</p>
                 </div>
               </div>
             )}
@@ -1166,10 +1161,10 @@ export default function AgentUIPage() {
 
           {/* Trace Panel Footer */}
           {executionTime && (
-            <div className="px-4 py-2.5 border-t border-[#2F5F7A]">
+            <div className="px-4 py-2.5 border-t border-gray-200">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[#8FA7B5]">Total execution time</span>
-                <span className="text-[#59C3C3]">{executionTime}</span>
+                <span className="text-gray-500">Total execution time</span>
+                <span className="text-orange-500">{executionTime}</span>
               </div>
             </div>
           )}
@@ -1184,11 +1179,11 @@ export default function AgentUIPage() {
           background: transparent;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #2F5F7A;
+          background: #d1d5db;
           border-radius: 3px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #2F5F7A;
+          background: #d1d5db;
         }
       `}</style>
     </div>

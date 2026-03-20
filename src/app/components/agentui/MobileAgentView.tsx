@@ -37,25 +37,25 @@ interface CollapsibleSectionProps {
 function CollapsibleSection({
   title,
   badge,
-  badgeColor = "bg-[#2E86AB]/20 text-[#2E86AB]",
+  badgeColor = "bg-orange-500/20 text-orange-600",
   defaultExpanded = false,
   children,
 }: CollapsibleSectionProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   return (
-    <div className="border border-[#163A52] rounded-lg overflow-hidden bg-[#102A43]/50">
+    <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-3 py-2.5 flex items-center justify-between bg-[#102A43] hover:bg-[#163A52] transition-colors"
+        className="w-full px-3 py-2.5 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
       >
         <div className="flex items-center gap-2">
           {isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-[#C7D2DA]" />
+            <ChevronDown className="w-4 h-4 text-gray-600" />
           ) : (
-            <ChevronRight className="w-4 h-4 text-[#C7D2DA]" />
+            <ChevronRight className="w-4 h-4 text-gray-600" />
           )}
-          <span className="text-sm text-[#F1F5F9]">{title}</span>
+          <span className="text-sm text-gray-900">{title}</span>
         </div>
         {badge && (
           <span className={`text-xs px-2 py-0.5 rounded-full ${badgeColor}`}>
@@ -64,7 +64,7 @@ function CollapsibleSection({
         )}
       </button>
       {isExpanded && (
-        <div className="p-3 border-t border-[#163A52] bg-[#0B1E2D]/50">
+        <div className="p-3 border-t border-gray-200 bg-white/50">
           {children}
         </div>
       )}
@@ -82,21 +82,21 @@ export function MobileAgentView({
   onAction,
 }: MobileAgentViewProps) {
   return (
-    <div className="flex flex-col h-screen bg-[#0B1E2D]">
+    <div className="flex flex-col h-screen bg-white">
       {/* Compact Header */}
-      <div className="px-3 py-2.5 border-b border-[#163A52] bg-gradient-to-r from-[#0B1E2D] to-[#102A43] flex items-center justify-between">
+      <div className="px-3 py-2.5 border-b border-gray-200 bg-gradient-to-r from-white to-gray-50 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-gradient-to-br from-[#2E86AB] to-[#59C3C3]">
-            <Sparkles className="w-4 h-4 text-[#F1F5F9]" />
+          <div className="p-1.5 rounded-lg bg-gradient-to-br from-orange-500 to-orange-400">
+            <Sparkles className="w-4 h-4 text-gray-900" />
           </div>
           <div>
-            <h1 className="text-sm text-[#F1F5F9]">AI Agent</h1>
-            <p className="text-xs text-[#8FA7B5]">Enterprise Assistant</p>
+            <h1 className="text-sm text-gray-900">AI Agent</h1>
+            <p className="text-xs text-gray-500">Enterprise Assistant</p>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#59C3C3]/10 border border-[#59C3C3]/30">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#59C3C3] animate-pulse" />
-          <span className="text-xs text-[#59C3C3]">Online</span>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-orange-400/10 border border-orange-400/30">
+          <div className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+          <span className="text-xs text-orange-500">Online</span>
         </div>
       </div>
 
@@ -104,49 +104,49 @@ export function MobileAgentView({
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 custom-scrollbar" style={{ maxHeight: 'calc(100vh - 140px)' }}>
         {/* User Message */}
         <div className="flex gap-2">
-          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#163A52] flex items-center justify-center">
-            <User className="w-4 h-4 text-[#C7D2DA]" />
+          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center">
+            <User className="w-4 h-4 text-gray-600" />
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs text-[#8FA7B5]">You</span>
-              <span className="text-xs text-[#8FA7B5]">2:34 PM</span>
+              <span className="text-xs text-gray-500">You</span>
+              <span className="text-xs text-gray-500">2:34 PM</span>
             </div>
-            <div className="bg-[#163A52] rounded-lg px-3 py-2">
-              <p className="text-sm text-[#F1F5F9]">{userQuery}</p>
+            <div className="bg-gray-100 rounded-lg px-3 py-2">
+              <p className="text-sm text-gray-900">{userQuery}</p>
             </div>
           </div>
         </div>
 
         {/* Agent Response Container */}
         <div className="flex gap-2">
-          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-[#2E86AB] to-[#59C3C3] flex items-center justify-center">
-            <MessageSquare className="w-4 h-4 text-[#F1F5F9]" />
+          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-orange-500 to-orange-400 flex items-center justify-center">
+            <MessageSquare className="w-4 h-4 text-gray-900" />
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs text-[#C7D2DA]">AI Agent</span>
-              <span className="text-xs text-[#8FA7B5]">2:34 PM</span>
-              <span className="text-xs text-[#59C3C3]">● Completed</span>
+              <span className="text-xs text-gray-600">AI Agent</span>
+              <span className="text-xs text-gray-500">2:34 PM</span>
+              <span className="text-xs text-orange-500">● Completed</span>
             </div>
             <div className="space-y-2">
               {/* Final Answer - Default Expanded - Compact Mobile Version */}
               <CollapsibleSection
                 title="Final Answer"
                 badge={`${recommendation.confidence}%`}
-                badgeColor="bg-[#59C3C3]/20 text-[#59C3C3]"
+                badgeColor="bg-orange-400/20 text-orange-500"
                 defaultExpanded={true}
               >
                 <div className="space-y-3">
                   {/* Compact resolution text */}
-                  <div className="text-sm text-[#F1F5F9] leading-relaxed">
+                  <div className="text-sm text-gray-900 leading-relaxed">
                     {recommendation.resolution}
                   </div>
 
                   {/* Additional context if present */}
                   {recommendation.additionalContext && (
-                    <div className="p-2.5 bg-[#2E86AB]/5 border border-[#2E86AB]/20 rounded-lg">
-                      <p className="text-xs text-[#3FA7D6]">
+                    <div className="p-2.5 bg-orange-500/5 border border-orange-400/20 rounded-lg">
+                      <p className="text-xs text-orange-500">
                         {recommendation.additionalContext}
                       </p>
                     </div>
@@ -155,12 +155,12 @@ export function MobileAgentView({
                   {/* Compact confidence bar */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-[#C7D2DA]">Confidence</span>
-                      <span className="text-[#59C3C3]">{recommendation.confidence}%</span>
+                      <span className="text-gray-600">Confidence</span>
+                      <span className="text-orange-500">{recommendation.confidence}%</span>
                     </div>
-                    <div className="w-full bg-[#163A52] rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-[#2E86AB] to-[#59C3C3] rounded-full transition-all"
+                        className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full transition-all"
                         style={{ width: `${recommendation.confidence}%` }}
                       />
                     </div>
@@ -181,24 +181,24 @@ export function MobileAgentView({
                         case "high":
                           return "text-[#EF4444] bg-[#EF4444]/10";
                         case "medium":
-                          return "text-[#F6C667] bg-[#F6C667]/10";
+                          return "text-orange-400 bg-orange-400/10";
                         case "low":
-                          return "text-[#2E86AB] bg-[#2E86AB]/10";
+                          return "text-orange-600 bg-orange-500/10";
                         default:
-                          return "text-[#C7D2DA] bg-[#8FA7B5]/10";
+                          return "text-gray-600 bg-gray-400/10";
                       }
                     };
 
                     return (
                       <div
                         key={action.id}
-                        className="flex items-start gap-2 p-2.5 bg-[#163A52]/30 border border-[#2F5F7A]/50 rounded-lg"
+                        className="flex items-start gap-2 p-2.5 bg-gray-100/30 border border-gray-200/50 rounded-lg"
                       >
-                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-br from-[#2E86AB] to-[#59C3C3] text-[#F1F5F9] text-xs flex-shrink-0 mt-0.5">
+                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-br from-orange-500 to-orange-400 text-gray-900 text-xs flex-shrink-0 mt-0.5">
                           {index + 1}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-[#F1F5F9]">{action.action}</p>
+                          <p className="text-xs text-gray-900">{action.action}</p>
                         </div>
                         {action.priority && (
                           <span
@@ -219,24 +219,24 @@ export function MobileAgentView({
               <CollapsibleSection
                 title="Agent Reasoning"
                 badge={`${reasoningSteps.length} steps`}
-                badgeColor="bg-[#2E86AB]/20 text-[#2E86AB]"
+                badgeColor="bg-orange-500/20 text-orange-600"
               >
                 <div className="space-y-2">
                   {reasoningSteps.map((step, index) => (
                     <div key={step.id} className="flex items-start gap-2">
-                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-[#2E86AB]/20 text-[#2E86AB] text-xs flex-shrink-0 mt-0.5">
+                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-orange-500/20 text-orange-600 text-xs flex-shrink-0 mt-0.5">
                         {index + 1}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-[#F1F5F9]">{step.label}</p>
+                        <p className="text-xs text-gray-900">{step.label}</p>
                         {step.description && (
-                          <p className="text-xs text-[#8FA7B5] mt-0.5">
+                          <p className="text-xs text-gray-500 mt-0.5">
                             {step.description}
                           </p>
                         )}
                       </div>
                       {step.status === "completed" && (
-                        <span className="text-xs text-[#59C3C3]">✓</span>
+                        <span className="text-xs text-orange-500">✓</span>
                       )}
                     </div>
                   ))}
@@ -247,18 +247,18 @@ export function MobileAgentView({
               <CollapsibleSection
                 title="Use Case Selected"
                 badge={`${selectedUseCase.confidence}% match`}
-                badgeColor="bg-[#2E86AB]/20 text-[#2E86AB]"
+                badgeColor="bg-orange-500/20 text-orange-600"
               >
                 <div className="space-y-2">
                   <div>
-                    <p className="text-sm text-[#F1F5F9]">{selectedUseCase.name}</p>
-                    <p className="text-xs text-[#C7D2DA] mt-1">
+                    <p className="text-sm text-gray-900">{selectedUseCase.name}</p>
+                    <p className="text-xs text-gray-600 mt-1">
                       {selectedUseCase.description}
                     </p>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#8FA7B5]">{selectedUseCase.category}</span>
-                    <span className="text-[#2E86AB]">{selectedUseCase.confidence}% match</span>
+                    <span className="text-gray-500">{selectedUseCase.category}</span>
+                    <span className="text-orange-600">{selectedUseCase.confidence}% match</span>
                   </div>
                 </div>
               </CollapsibleSection>
@@ -267,25 +267,25 @@ export function MobileAgentView({
               <CollapsibleSection
                 title="Skills Executed"
                 badge={`${skillExecutions.length} skills`}
-                badgeColor="bg-[#2E86AB]/20 text-[#2E86AB]"
+                badgeColor="bg-orange-500/20 text-orange-600"
               >
                 <div className="space-y-2">
                   {skillExecutions.map((skill) => (
                     <div
                       key={skill.id}
-                      className="flex items-start justify-between gap-2 p-2 bg-[#163A52]/30 rounded"
+                      className="flex items-start justify-between gap-2 p-2 bg-gray-100/30 rounded"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-[#F1F5F9]">{skill.name}</p>
-                        <p className="text-xs text-[#8FA7B5] mt-0.5">
+                        <p className="text-xs text-gray-900">{skill.name}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
                           {skill.description}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         {skill.status === "completed" && (
-                          <span className="text-xs text-[#59C3C3]">✓</span>
+                          <span className="text-xs text-orange-500">✓</span>
                         )}
-                        <span className="text-xs text-[#8FA7B5]">{skill.duration}</span>
+                        <span className="text-xs text-gray-500">{skill.duration}</span>
                       </div>
                     </div>
                   ))}
@@ -296,27 +296,27 @@ export function MobileAgentView({
               <CollapsibleSection
                 title="Tools & APIs"
                 badge={`${toolCalls.length} calls`}
-                badgeColor="bg-[#59C3C3]/20 text-[#59C3C3]"
+                badgeColor="bg-orange-400/20 text-orange-500"
               >
                 <div className="space-y-2">
                   {toolCalls.map((tool) => (
                     <div
                       key={tool.id}
-                      className="flex items-start justify-between gap-2 p-2 bg-[#163A52]/30 rounded"
+                      className="flex items-start justify-between gap-2 p-2 bg-gray-100/30 rounded"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-[#F1F5F9] font-mono">
+                        <p className="text-xs text-gray-900 font-mono">
                           {tool.toolName}
                         </p>
-                        <p className="text-xs text-[#8FA7B5] mt-0.5">
+                        <p className="text-xs text-gray-500 mt-0.5">
                           {tool.targetSystem}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         {tool.status === "success" && (
-                          <span className="text-xs text-[#59C3C3]">200</span>
+                          <span className="text-xs text-orange-500">200</span>
                         )}
-                        <span className="text-xs text-[#8FA7B5]">{tool.responseTime}</span>
+                        <span className="text-xs text-gray-500">{tool.responseTime}</span>
                       </div>
                     </div>
                   ))}
@@ -328,22 +328,22 @@ export function MobileAgentView({
       </div>
 
       {/* Compact Input Bar */}
-      <div className="border-t border-[#163A52] bg-[#0B1E2D] px-3 py-2.5">
+      <div className="border-t border-gray-200 bg-white px-3 py-2.5">
         <div className="flex items-center gap-2">
           <input
             type="text"
             placeholder="Ask the agent..."
-            className="flex-1 bg-[#102A43] border border-[#163A52] rounded-lg px-3 py-2 text-sm text-[#F1F5F9] placeholder-[#8FA7B5] focus:outline-none focus:border-[#2E86AB]/50"
+            className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-orange-400/50"
           />
-          <button className="p-2 rounded-lg bg-gradient-to-r from-[#2E86AB] to-[#59C3C3] hover:from-[#2E86AB] hover:to-[#59C3C3] text-[#F1F5F9] transition-all">
+          <button className="p-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-400 hover:from-orange-500 hover:to-orange-400 text-gray-900 transition-all">
             <Sparkles className="w-4 h-4" />
           </button>
         </div>
         <div className="mt-2 flex items-center justify-between text-xs">
-          <span className="text-[#8FA7B5]">
-            <span className="text-[#59C3C3]">●</span> Ready
+          <span className="text-gray-500">
+            <span className="text-orange-500">●</span> Ready
           </span>
-          <span className="text-[#2F5F7A]">Execution: 2.18s</span>
+          <span className="text-gray-300">Execution: 2.18s</span>
         </div>
       </div>
 
@@ -355,11 +355,11 @@ export function MobileAgentView({
           background: transparent;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #2F5F7A;
+          background: #d1d5db;
           border-radius: 3px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #3FA7D6;
+          background: #fb923c;
         }
       `}</style>
     </div>

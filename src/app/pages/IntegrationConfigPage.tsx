@@ -537,7 +537,7 @@ export default function IntegrationConfigPage() {
               <button
                 onClick={handleEnable}
                 disabled={!allFieldsFilled || saving}
-                className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 Save &amp; Enable
@@ -849,7 +849,7 @@ function EndpointsSection({ integration, catalog, tenantId, onUpdate }: Endpoint
         {expanded && (
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Endpoint
@@ -897,7 +897,7 @@ function EndpointsSection({ integration, catalog, tenantId, onUpdate }: Endpoint
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
                       />
                       <div className="flex gap-2">
-                        <button onClick={handleSaveEdit} disabled={savingEdit || !editForm.name.trim() || !editForm.path.trim()} className="px-3 py-1.5 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center gap-1.5">
+                        <button onClick={handleSaveEdit} disabled={savingEdit || !editForm.name.trim() || !editForm.path.trim()} className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 flex items-center gap-1.5">
                           {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save
                         </button>
                         <button onClick={() => setEditingId(null)} className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
@@ -1199,7 +1199,7 @@ function EndpointsSection({ integration, catalog, tenantId, onUpdate }: Endpoint
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
                 />
                 <div className="flex gap-2">
-                  <button onClick={handleAdd} disabled={adding || !form.name.trim() || !form.path.trim()} className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                  <button onClick={handleAdd} disabled={adding || !form.name.trim() || !form.path.trim()} className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50 flex items-center gap-1.5">
                     {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Add Endpoint
                   </button>
                   <button onClick={() => { setShowAdd(false); setForm({ ...EMPTY_FORM }); }} className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>

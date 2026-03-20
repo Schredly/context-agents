@@ -65,6 +65,28 @@ export default function GenomeDetailPage() {
   const [graph, setGraph] = useState<GenomeGraphResponse | null>(null);
   const [showGraph, setShowGraph] = useState(true);
   const [expandedObject, setExpandedObject] = useState<string | null>(null);
+  // Editable cost fields
+  const [editingCost, setEditingCost] = useState<string | null>(null);
+  const [costValue, setCostValue] = useState("");
+  const [savingCost, setSavingCost] = useState(false);
+
+  const saveCost = async (field: string, value: number | string) => {
+    if (!genome) return;
+    setSavingCost(true);
+    try {
+      const res = await fetch(`/api/admin/acme/genomes/${genome.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setGenome(updated);
+      }
+    } catch {}
+    setSavingCost(false);
+    setEditingCost(null);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -109,10 +131,9 @@ export default function GenomeDetailPage() {
   const doc = genome.genome_document;
   const VendorIcon = vendorIcons[genome.vendor] || Package;
 
-  const savingsPercentage = (
-    ((genome.legacy_cost - genome.migrated_cost) / genome.legacy_cost) *
-    100
-  ).toFixed(1);
+  const savingsPercentage = genome.legacy_cost > 0
+    ? (((genome.legacy_cost - genome.migrated_cost) / genome.legacy_cost) * 100).toFixed(1)
+    : "0.0";
 
   // Parse relationships into from/to pairs
   const parsedRelationships = doc.relationships.map((r) => {
@@ -161,11 +182,19 @@ export default function GenomeDetailPage() {
                 <Download className="w-4 h-4" />
                 Export Genome
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium">
+              <button className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium">
                 <Hammer className="w-4 h-4" />
                 Rebuild Application
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm font-medium">
+              <button
+                onClick={async () => {
+                  if (!confirm(`Delete genome "${genome.application_name}"? This cannot be undone.`)) return;
+                  try {
+                    const res = await fetch(`/api/admin/acme/genomes/${genome.id}`, { method: "DELETE" });
+                    if (res.ok || res.status === 204) navigate("/genomes");
+                  } catch {}
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm font-medium">
                 <Trash2 className="w-4 h-4" />
                 Delete
               </button>
@@ -198,13 +227,23 @@ export default function GenomeDetailPage() {
                 {genome.application_name}
               </p>
             </div>
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 cursor-pointer hover:border-gray-300 transition-colors"
+              onClick={() => { setEditingCost("category"); setCostValue(genome.category || ""); }}>
               <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">
                 Category
               </p>
-              <p className="text-sm font-medium text-gray-900">
-                {genome.category}
-              </p>
+              {editingCost === "category" ? (
+                <input autoFocus type="text" value={costValue}
+                  onChange={(e) => setCostValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveCost("category", costValue); if (e.key === "Escape") setEditingCost(null); }}
+                  onBlur={() => saveCost("category", costValue)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full text-sm font-medium text-gray-900 bg-gray-50 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+              ) : (
+                <p className="text-sm font-medium text-gray-900">
+                  {genome.category || <span className="text-gray-400 italic">Click to set</span>}
+                </p>
+              )}
             </div>
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
               <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">
@@ -214,13 +253,23 @@ export default function GenomeDetailPage() {
                 {genome.source_platform}
               </p>
             </div>
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 cursor-pointer hover:border-gray-300 transition-colors"
+              onClick={() => { setEditingCost("target_platform"); setCostValue(genome.target_platform || ""); }}>
               <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">
                 Target Platform
               </p>
-              <p className="text-xs font-mono bg-blue-50 px-2 py-1 rounded text-blue-700 inline-block">
-                {genome.target_platform}
-              </p>
+              {editingCost === "target_platform" ? (
+                <input autoFocus type="text" value={costValue}
+                  onChange={(e) => setCostValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveCost("target_platform", costValue); if (e.key === "Escape") setEditingCost(null); }}
+                  onBlur={() => saveCost("target_platform", costValue)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full text-xs font-mono text-blue-700 bg-gray-50 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+              ) : (
+                <p className="text-xs font-mono bg-blue-50 px-2 py-1 rounded text-blue-700 inline-block">
+                  {genome.target_platform || <span className="text-gray-400 italic font-sans">Click to set</span>}
+                </p>
+              )}
             </div>
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
               <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">
@@ -239,7 +288,9 @@ export default function GenomeDetailPage() {
             Cost Profile
           </h2>
           <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            {/* Legacy Cost */}
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 cursor-pointer hover:border-gray-300 transition-colors"
+              onClick={() => { setEditingCost("legacy_cost"); setCostValue(String(genome.legacy_cost)); }}>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
                   <Package className="w-4 h-4 text-gray-600" />
@@ -248,13 +299,27 @@ export default function GenomeDetailPage() {
                   Legacy Cost
                 </p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900 font-mono">
-                {formatCurrency(genome.legacy_cost)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">Annual</p>
+              {editingCost === "legacy_cost" ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-semibold text-gray-400">$</span>
+                  <input autoFocus type="number" value={costValue}
+                    onChange={(e) => setCostValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveCost("legacy_cost", parseFloat(costValue) || 0); if (e.key === "Escape") setEditingCost(null); }}
+                    onBlur={() => saveCost("legacy_cost", parseFloat(costValue) || 0)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full text-2xl font-semibold text-gray-900 font-mono bg-gray-50 border border-gray-300 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                </div>
+              ) : (
+                <p className="text-2xl font-semibold text-gray-900 font-mono">
+                  {formatCurrency(genome.legacy_cost)}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">{editingCost === "legacy_cost" ? "Press Enter to save" : "Annual — click to edit"}</p>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            {/* Migrated Cost */}
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 cursor-pointer hover:border-gray-300 transition-colors"
+              onClick={() => { setEditingCost("migrated_cost"); setCostValue(String(genome.migrated_cost)); }}>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
                   <TrendingDown className="w-4 h-4 text-emerald-600" />
@@ -263,21 +328,40 @@ export default function GenomeDetailPage() {
                   Migrated Cost
                 </p>
               </div>
-              <p className="text-2xl font-semibold text-emerald-600 font-mono">
-                {formatCurrency(genome.migrated_cost)}
-              </p>
+              {editingCost === "migrated_cost" ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-semibold text-emerald-400">$</span>
+                  <input autoFocus type="number" value={costValue}
+                    onChange={(e) => setCostValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveCost("migrated_cost", parseFloat(costValue) || 0); if (e.key === "Escape") setEditingCost(null); }}
+                    onBlur={() => saveCost("migrated_cost", parseFloat(costValue) || 0)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full text-2xl font-semibold text-emerald-600 font-mono bg-gray-50 border border-emerald-300 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+              ) : (
+                <p className="text-2xl font-semibold text-emerald-600 font-mono">
+                  {formatCurrency(genome.migrated_cost)}
+                </p>
+              )}
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-emerald-600 font-medium">
-                  ↓ {savingsPercentage}% savings
-                </span>
-                <span className="text-xs text-gray-500">
-                  ({formatCurrency(genome.legacy_cost - genome.migrated_cost)}
-                  /year)
-                </span>
+                {editingCost === "migrated_cost" ? (
+                  <span className="text-xs text-gray-500">Press Enter to save</span>
+                ) : (
+                  <>
+                    <span className="text-xs text-emerald-600 font-medium">
+                      ↓ {savingsPercentage}% savings
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      ({formatCurrency(genome.legacy_cost - genome.migrated_cost)}/year)
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            {/* Operational Cost */}
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 cursor-pointer hover:border-gray-300 transition-colors"
+              onClick={() => { setEditingCost("operational_cost"); setCostValue(String(genome.operational_cost)); }}>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
                   <Zap className="w-4 h-4 text-blue-600" />
@@ -286,10 +370,22 @@ export default function GenomeDetailPage() {
                   Operational Cost
                 </p>
               </div>
-              <p className="text-2xl font-semibold text-blue-600 font-mono">
-                {formatCurrency(genome.operational_cost)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">Annual</p>
+              {editingCost === "operational_cost" ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-semibold text-blue-400">$</span>
+                  <input autoFocus type="number" value={costValue}
+                    onChange={(e) => setCostValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveCost("operational_cost", parseFloat(costValue) || 0); if (e.key === "Escape") setEditingCost(null); }}
+                    onBlur={() => saveCost("operational_cost", parseFloat(costValue) || 0)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full text-2xl font-semibold text-blue-600 font-mono bg-gray-50 border border-blue-300 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              ) : (
+                <p className="text-2xl font-semibold text-blue-600 font-mono">
+                  {formatCurrency(genome.operational_cost)}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">{editingCost === "operational_cost" ? "Press Enter to save" : "Annual — click to edit"}</p>
             </div>
           </div>
         </div>

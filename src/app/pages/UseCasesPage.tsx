@@ -65,7 +65,7 @@ export default function UseCasesPage() {
           </div>
           <Link
             to="/use-cases/create"
-            className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
           >
             <Plus className="w-4 h-4" />
             Create Use Case
@@ -87,7 +87,7 @@ export default function UseCasesPage() {
             <p className="mb-3">No use cases configured yet.</p>
             <Link
               to="/use-cases/create"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />
               Create Use Case

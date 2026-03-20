@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, CheckCircle2, Circle, Loader2, AlertCircle } from "lucide-react";
+import { Plus, CheckCircle2, Circle, Loader2, AlertCircle, Server, FolderOpen, Cloud, MessageSquare, GitBranch, ClipboardList, Rocket } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { useTenants } from "../context/TenantContext";
@@ -8,15 +8,20 @@ import * as api from "../services/api";
 
 const MULTI_INSTANCE_TYPES = new Set(["github"]);
 
-const ICONS: Record<string, string> = {
-  servicenow: "\u{1F527}",
-  "google-drive": "\u{1F4C1}",
-  salesforce: "\u2601\uFE0F",
-  slack: "\u{1F4AC}",
-  github: "\u{1F419}",
-  jira: "\u{1F4CB}",
-  replit: "\u{1F680}",
+const ICON_COMPONENTS: Record<string, typeof Server> = {
+  servicenow: Server,
+  "google-drive": FolderOpen,
+  salesforce: Cloud,
+  slack: MessageSquare,
+  github: GitBranch,
+  jira: ClipboardList,
+  replit: Rocket,
 };
+
+function IntegrationIcon({ type, className = "w-5 h-5" }: { type: string; className?: string }) {
+  const Icon = ICON_COMPONENTS[type] || Server;
+  return <Icon className={className} />;
+}
 
 export default function IntegrationsPage() {
   const { currentTenantId } = useTenants();
@@ -111,7 +116,7 @@ export default function IntegrationsPage() {
             <button
               onClick={() => setShowAdd(!showAdd)}
               disabled={!currentTenantId || availableTypes.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
               Add Integration
@@ -124,7 +129,7 @@ export default function IntegrationsPage() {
                     onClick={() => handleAddClick(key)}
                     className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors first:rounded-t-lg last:rounded-b-lg flex items-center gap-2"
                   >
-                    <span className="text-lg">{ICONS[key] ?? "🔌"}</span>
+                    <IntegrationIcon type={key} className="w-4 h-4 text-gray-500" />
                     {entry.name}
                   </button>
                 ))}
@@ -165,7 +170,7 @@ export default function IntegrationsPage() {
                 <button
                   onClick={() => handleAdd(namePromptType, nameInput.trim())}
                   disabled={!nameInput.trim()}
-                  className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Create
                 </button>
@@ -189,7 +194,7 @@ export default function IntegrationsPage() {
             <p className="mb-3">No integrations configured yet.</p>
             <button
               onClick={() => setShowAdd(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />
               Add Integration
@@ -206,8 +211,8 @@ export default function IntegrationsPage() {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="text-3xl">
-                      {ICONS[integration.integration_type] ?? "🔌"}
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600">
+                      <IntegrationIcon type={integration.integration_type} className="w-5 h-5" />
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-gray-900">

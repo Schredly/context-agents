@@ -48,24 +48,24 @@ export function AgentResponseCard({ sections, timestamp }: AgentResponseCardProp
   const getColor = (type: string) => {
     switch (type) {
       case "reasoning":
-        return "text-[#2E86AB] border-[#2E86AB]/30 bg-[#2E86AB]/10";
+        return "text-orange-600 border-orange-400/30 bg-orange-500/10";
       case "usecase":
-        return "text-[#2E86AB] border-[#2E86AB]/30 bg-[#2E86AB]/10";
+        return "text-orange-600 border-orange-400/30 bg-orange-500/10";
       case "skills":
-        return "text-[#59C3C3] border-[#59C3C3]/30 bg-[#59C3C3]/10";
+        return "text-orange-500 border-orange-400/30 bg-orange-400/10";
       case "tools":
-        return "text-[#2E86AB] border-[#2E86AB]/30 bg-[#2E86AB]/10";
+        return "text-orange-600 border-orange-400/30 bg-orange-500/10";
       case "answer":
-        return "text-[#59C3C3] border-[#59C3C3]/30 bg-[#59C3C3]/10";
+        return "text-orange-500 border-orange-400/30 bg-orange-400/10";
       default:
-        return "text-[#C7D2DA] border-[#8FA7B5]/30 bg-[#8FA7B5]/10";
+        return "text-gray-600 border-gray-400/30 bg-gray-400/10";
     }
   };
 
   return (
     <div className="mb-4">
       {timestamp && (
-        <div className="text-xs text-[#8FA7B5] mb-2 ml-11">{timestamp}</div>
+        <div className="text-xs text-gray-500 mb-2 ml-11">{timestamp}</div>
       )}
       <div className="ml-11 space-y-2">
         {sections.map((section, index) => {
@@ -97,14 +97,14 @@ export function AgentResponseCard({ sections, timestamp }: AgentResponseCardProp
                   {Array.isArray(section.content) ? (
                     <ul className="space-y-1">
                       {section.content.map((item, i) => (
-                        <li key={i} className="text-sm text-[#C7D2DA] flex items-start gap-2">
-                          <span className="text-[#8FA7B5] mt-1">•</span>
+                        <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
                           <span>{item}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-[#C7D2DA]">{section.content}</p>
+                    <p className="text-sm text-gray-600">{section.content}</p>
                   )}
                 </div>
               )}

@@ -36,24 +36,24 @@ export function InputPanel({
   };
 
   return (
-    <div className="border-t border-[#2F5F7A] bg-[#0B1E2D] px-4 py-4">
+    <div className="border-t border-gray-200 bg-white px-4 py-4">
       {/* Context indicator */}
       <div className="mb-3 flex items-center justify-between text-xs">
-        <span className="text-[#8FA7B5]">
+        <span className="text-gray-500">
           {mode === "refine" ? "Prompt Refinement Mode" : mode === "input" ? "Awaiting Input" : "Enterprise AI Agent"}
         </span>
-        <div className="flex items-center gap-2 text-[#8FA7B5]">
+        <div className="flex items-center gap-2 text-gray-500">
           {mode === "refine" && onCancelRefine && (
             <button
               type="button"
               onClick={onCancelRefine}
-              className="flex items-center gap-1 text-[#8FA7B5] hover:text-red-400 transition-colors"
+              className="flex items-center gap-1 text-gray-500 hover:text-red-400 transition-colors"
             >
               <X className="w-3 h-3" />
               <span>Cancel</span>
             </button>
           )}
-          <kbd className="px-1.5 py-0.5 bg-[#102A43] border border-[#2F5F7A] rounded text-xs">
+          <kbd className="px-1.5 py-0.5 bg-gray-50 border border-gray-200 rounded text-xs">
             Shift + Enter
           </kbd>
           <span>for new line</span>
@@ -75,10 +75,10 @@ export function InputPanel({
           }
           disabled={disabled}
           rows={1}
-          className={`w-full bg-[#102A43] border rounded-[10px] px-4 py-3.5 text-[#F1F5F9] placeholder-[#8FA7B5] focus:outline-none resize-none disabled:opacity-50 transition-colors duration-150 ${
+          className={`w-full bg-gray-50 border rounded-[10px] px-4 py-3.5 text-gray-900 placeholder-gray-400 focus:outline-none resize-none disabled:opacity-50 transition-colors duration-150 ${
             isFocused
-              ? "border-[#2F5F7A]"
-              : "border-[#2F5F7A]"
+              ? "border-gray-200"
+              : "border-gray-200"
           }`}
           style={{
             minHeight: "52px",
@@ -106,7 +106,7 @@ export function InputPanel({
                 type="button"
                 onClick={onAttachContext}
                 disabled={disabled}
-                className="px-3.5 py-2 rounded-lg bg-[#102A43] hover:bg-[#1E4A66] text-[#C7D2DA] hover:text-[#F1F5F9] border border-[#2F5F7A] hover:border-[#2F5F7A] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3.5 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-200 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Attach Context"
               >
                 <Paperclip className="w-4 h-4" />
@@ -119,7 +119,7 @@ export function InputPanel({
                 type="button"
                 onClick={onRunTool}
                 disabled={disabled}
-                className="px-3.5 py-2 rounded-lg bg-[#102A43] hover:bg-[#1E4A66] text-[#C7D2DA] hover:text-[#F1F5F9] border border-[#2F5F7A] hover:border-[#2F5F7A] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3.5 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-200 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Run Tool"
               >
                 <Wrench className="w-4 h-4" />
@@ -144,7 +144,7 @@ export function InputPanel({
             <button
               type="submit"
               disabled={disabled || !message.trim()}
-              className="px-5 py-2 rounded-lg bg-[#2E86AB] hover:bg-[#3FA7D6] text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+              className="px-5 py-2 rounded-lg bg-orange-500 hover:bg-orange-400 text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
             >
               <Send className="w-4 h-4" />
               <span>{mode === "refine" ? "Refine" : mode === "input" ? "Submit" : "Ask Agent"}</span>
@@ -154,16 +154,16 @@ export function InputPanel({
       </form>
 
       {/* Status bar */}
-      <div className="mt-3 pt-3 border-t border-[#2F5F7A] flex items-center justify-between text-xs">
+      <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between text-xs">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#59C3C3]" />
-            <span className="text-[#8FA7B5]">Agent online</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+            <span className="text-gray-500">Agent online</span>
           </div>
-          <span className="text-[#2F5F7A]">&middot;</span>
-          <span className="text-[#8FA7B5]">Response time: ~2s</span>
+          <span className="text-gray-300">&middot;</span>
+          <span className="text-gray-500">Response time: ~2s</span>
         </div>
-        <div className="text-[#8FA7B5]">
+        <div className="text-gray-500">
           Powered by Enterprise AI
         </div>
       </div>

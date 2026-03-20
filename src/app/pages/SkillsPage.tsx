@@ -62,7 +62,7 @@ export default function SkillsPage() {
           </div>
           <Link
             to="/skills/create"
-            className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
           >
             <Plus className="w-4 h-4" />
             Create Skill
@@ -84,7 +84,7 @@ export default function SkillsPage() {
             <p className="mb-3">No skills configured yet.</p>
             <Link
               to="/skills/create"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
             >
               <Plus className="w-4 h-4" />
               Create Skill

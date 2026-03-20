@@ -82,10 +82,10 @@ function getActionIcon(integration: string) {
 function getIndicatorColor(integration: string) {
   switch (integration) {
     case "servicenow":
-      return "bg-[#59C3C3]";
+      return "bg-orange-400";
     case "jira":
     case "github":
-      return "bg-[#2E86AB]";
+      return "bg-orange-500";
     case "google-drive":
       return "bg-violet-500";
     case "slack":
@@ -160,14 +160,14 @@ function ActionButton({
       disabled={disabled || isExecuting || isRefining}
       className={`group relative flex items-center gap-3 px-4 py-3 rounded-[10px] border transition-colors duration-150 ${
         isError
-          ? "bg-[#102A43] border-red-500/40"
+          ? "bg-gray-50 border-red-500/40"
           : isRefining
-          ? "bg-[#102A43] border-amber-500/40"
+          ? "bg-gray-50 border-amber-500/40"
           : isCompleted
-          ? "bg-[#102A43] border-[#59C3C3]/40"
+          ? "bg-gray-50 border-orange-400/40"
           : isRecommended
-          ? "bg-[rgba(246,198,103,0.08)] border-[#2F5F7A] border-l-[3px] border-l-[#F6C667] hover:bg-[#1E4A66] hover:border-[#2F5F7A] hover:border-l-[#F6C667]"
-          : "bg-[#102A43] border-[#2F5F7A] hover:bg-[#1E4A66] hover:border-[#2F5F7A]"
+          ? "bg-orange-50 border-gray-200 border-l-[3px] border-l-orange-400 hover:bg-gray-100 hover:border-gray-200 hover:border-l-orange-400"
+          : "bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-200"
       } ${
         disabled || isExecuting || isRefining
           ? "opacity-50 cursor-not-allowed"
@@ -177,15 +177,15 @@ function ActionButton({
       {/* Indicator dot */}
       <div className="flex items-center gap-2.5 flex-shrink-0">
         <div className={`w-2 h-2 rounded-full ${
-          isError ? "bg-red-500" : isRefining ? "bg-amber-500 animate-pulse" : isCompleted ? "bg-[#59C3C3]" : indicatorColor
+          isError ? "bg-red-500" : isRefining ? "bg-amber-500 animate-pulse" : isCompleted ? "bg-orange-400" : indicatorColor
         }`} />
-        <div className="text-[#C7D2DA]">
+        <div className="text-gray-600">
           {isExecuting ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : isError ? (
             <AlertCircle className="w-4 h-4 text-red-400" />
           ) : isCompleted ? (
-            <CheckCircle2 className="w-4 h-4 text-[#59C3C3]" />
+            <CheckCircle2 className="w-4 h-4 text-orange-500" />
           ) : (
             getActionIcon(integration)
           )}
@@ -194,13 +194,13 @@ function ActionButton({
 
       {/* Text content */}
       <div className="flex-1 text-left">
-        <div className="text-sm text-[#F1F5F9] flex items-center gap-1.5">
+        <div className="text-sm text-gray-900 flex items-center gap-1.5">
           {action.label}
           {isRecommended && !isCompleted && !isError && (
-            <Star className="w-3 h-3 text-[#C7D2DA]" />
+            <Star className="w-3 h-3 text-gray-600" />
           )}
         </div>
-        <div className="text-xs text-[#8FA7B5] mt-0.5">
+        <div className="text-xs text-gray-500 mt-0.5">
           {isExecuting
             ? "Executing..."
             : isRefining
@@ -218,7 +218,7 @@ function ActionButton({
           tabIndex={0}
           onClick={(e) => { e.stopPropagation(); onDelete(action); }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onDelete(action); } }}
-          className="flex-shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 text-[#8FA7B5] hover:text-red-400 transition-all"
+          className="flex-shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all"
           title="Delete action"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -424,21 +424,21 @@ export function AgentActions({
   const hasRecommendations = recommendedActions.length > 0;
 
   return (
-    <div className="bg-[#0B1E2D] border border-[#2F5F7A] rounded-[10px] overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-[10px] overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-[#2F5F7A]">
+      <div className="px-4 py-3 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-[#F1F5F9] text-sm font-medium">{title}</h3>
-            <p className="text-xs text-[#8FA7B5] mt-0.5">
+            <h3 className="text-gray-900 text-sm font-medium">{title}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
               {hasRecommendations
                 ? "Context-aware actions based on agent analysis"
                 : "Automated workflows and integrations"}
             </p>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#2F5F7A]">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#59C3C3]" />
-            <span className="text-xs text-[#8FA7B5]">Ready</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-gray-200">
+            <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+            <span className="text-xs text-gray-500">Ready</span>
           </div>
         </div>
       </div>
@@ -448,7 +448,7 @@ export function AgentActions({
         {/* Recommended Section */}
         {hasRecommendations && (
           <div>
-            <span className="text-[11px] font-medium text-[#8FA7B5] uppercase tracking-[0.08em]">
+            <span className="text-[11px] font-medium text-gray-500 uppercase tracking-[0.08em]">
               Recommended Actions
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
@@ -472,7 +472,7 @@ export function AgentActions({
         {/* Other Actions */}
         {hasRecommendations && availableActions.length > 0 && (
           <div>
-            <span className="text-[11px] font-medium text-[#8FA7B5] uppercase tracking-[0.08em]">
+            <span className="text-[11px] font-medium text-gray-500 uppercase tracking-[0.08em]">
               Other Actions
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
@@ -529,14 +529,14 @@ export function AgentActions({
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2.5 border-t border-[#2F5F7A]">
+      <div className="px-4 py-2.5 border-t border-gray-200">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-[#8FA7B5]">
+          <span className="text-gray-500">
             {hasRecommendations
               ? `${recommendedActions.length} recommended, ${availableActions.length} other`
               : `${allActions.length} action${allActions.length !== 1 ? "s" : ""} available`}
           </span>
-          <span className="text-[#8FA7B5]">
+          <span className="text-gray-500">
             {hasRecommendations ? "Context-aware" : "Automation enabled"}
           </span>
         </div>

@@ -22,9 +22,7 @@ import {
   Plus,
   Circle,
   Search,
-  Database,
   FileCode,
-  Package,
 } from "lucide-react";
 
 const TENANT = "acme";
@@ -50,6 +48,13 @@ interface Endpoint {
   path: string;
   method: string;
   description: string;
+}
+
+interface SnowApplication {
+  name: string;
+  scope: string;
+  vendor: string | null;
+  sys_id: string;
 }
 
 interface StepState {
@@ -78,13 +83,6 @@ const WIZARD_STEPS = [
   { id: 4, label: "Expand & Commit" },
 ];
 
-const TARGET_TYPES = [
-  { id: "service_catalog", label: "Service Catalog", icon: Package, description: "Catalog items, forms, and variables" },
-  { id: "application", label: "Application", icon: FileCode, description: "Scoped or custom application" },
-  { id: "table", label: "Table", icon: Database, description: "Table-based data structure" },
-  { id: "update_set", label: "Update Set", icon: Globe, description: "Configuration update set" },
-];
-
 const SCAN_DEPTHS = [
   { id: "structure", label: "Structure", description: "Objects, fields, relationships" },
   { id: "config", label: "Config", description: "Structure + configuration details" },
@@ -107,7 +105,6 @@ export default function GenomeCapturePage() {
   const [sourceTestResult, setSourceTestResult] = useState<{ ok: boolean; detail?: string } | null>(null);
 
   // Step 2 — extraction target
-  const [targetType, setTargetType] = useState("service_catalog");
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null);
   const [targetName, setTargetName] = useState("");
   const [scanDepth, setScanDepth] = useState("structure");
@@ -115,8 +112,16 @@ export default function GenomeCapturePage() {
   const [newEpName, setNewEpName] = useState("");
   const [newEpPath, setNewEpPath] = useState("");
   const [newEpDesc, setNewEpDesc] = useState("");
-  // Dynamic discovery
-  const [discoveredCatalogs, setDiscoveredCatalogs] = useState<string[]>([]);
+  // Extraction type
+  const [extractionType, setExtractionType] = useState<"application" | "service_catalog">("application");
+  // Application discovery
+  const [applications, setApplications] = useState<SnowApplication[]>([]);
+  const [loadingApps, setLoadingApps] = useState(false);
+  const [appSearch, setAppSearch] = useState("");
+  const [selectedApp, setSelectedApp] = useState<SnowApplication | null>(null);
+  const [appDropdownOpen, setAppDropdownOpen] = useState(false);
+  // Catalog discovery
+  const [catalogs, setCatalogs] = useState<string[]>([]);
   const [loadingCatalogs, setLoadingCatalogs] = useState(false);
   const [selectedCatalog, setSelectedCatalog] = useState<string>("");
 
@@ -154,11 +159,22 @@ export default function GenomeCapturePage() {
       .finally(() => setLoadingIntegrations(false));
   }, []);
 
-  // Discover catalogs when entering step 2 with service_catalog type
+  // Discover applications + catalogs when entering step 2
   useEffect(() => {
-    if (step !== 2 || targetType !== "service_catalog" || !selectedIntegration) return;
+    if (step !== 2 || !selectedIntegration) return;
+    // Fetch applications
+    setLoadingApps(true);
+    setApplications([]);
+    fetch(`${API}/genomes/discover/applications`)
+      .then((r) => r.json())
+      .then((data: { applications: SnowApplication[] }) => {
+        setApplications(data.applications || []);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingApps(false));
+    // Fetch catalogs
     setLoadingCatalogs(true);
-    setDiscoveredCatalogs([]);
+    setCatalogs([]);
     fetch(`${API}/genomes/discover/candidates`)
       .then((r) => r.json())
       .then((results: Array<{ candidates: Array<{ name: string; type: string }> }>) => {
@@ -168,11 +184,11 @@ export default function GenomeCapturePage() {
             if (c.type === "catalog" && !names.includes(c.name)) names.push(c.name);
           }
         }
-        setDiscoveredCatalogs(names);
+        setCatalogs(names);
       })
       .catch(() => {})
       .finally(() => setLoadingCatalogs(false));
-  }, [step, targetType, selectedIntegration]);
+  }, [step, selectedIntegration]);
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -222,13 +238,11 @@ export default function GenomeCapturePage() {
 
   const runScan = async () => {
     if (!selectedIntegration) return;
-    // For service_catalog, auto-resolve endpoint if not explicitly selected
-    const effectiveEndpoint = selectedEndpoint
-      || (targetType === "service_catalog"
-        ? selectedIntegration.endpoints.find((ep) => ep.name === "Catalog By Title") || selectedIntegration.endpoints[0]
-        : null);
-    if (!effectiveEndpoint && targetType !== "service_catalog") return;
-    if (!effectiveEndpoint && !targetName) return;
+    if (extractionType === "application" && !selectedApp) return;
+    if (extractionType === "service_catalog" && !selectedCatalog) return;
+    const effectiveEndpoint = selectedEndpoint || null;
+    const scanTargetName = extractionType === "service_catalog" ? selectedCatalog : (selectedApp?.name || targetName);
+    const scanTargetType = extractionType;
     setScanning(true);
     setScanResult(null);
     setScanPipeline([
@@ -244,19 +258,23 @@ export default function GenomeCapturePage() {
     updateScanStep(0, { status: "done", message: `Connected to ${selectedIntegration.config?.instance_url || selectedIntegration.integration_type}` });
 
     // Animate: Vendor Adapter
-    const epPath = effectiveEndpoint?.path || "/api/1939459/overyonder_selfdeploy/extract/...";
+    const epPath = effectiveEndpoint?.path || `/extract/${(scanTargetName || "app").toLowerCase().replace(/ /g, "_")}`;
     updateScanStep(1, { status: "running", message: `POST ${epPath} (depth: ${scanDepth})...` });
 
     try {
+      const scanBody = {
+        integration_id: selectedIntegration.id,
+        target_type: scanTargetType,
+        target_name: scanTargetName,
+        depth: scanDepth,
+        scope: selectedApp?.scope || "",
+        application: selectedApp?.name || scanTargetName || "",
+      };
+      console.log("[GenomeCapture] Scan request →", JSON.stringify(scanBody, null, 2));
       const res = await fetch(`${API}/genomes/capture/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          integration_id: selectedIntegration.id,
-          target_type: targetType,
-          target_name: targetName || effectiveEndpoint?.name || "Unknown",
-          depth: scanDepth,
-        }),
+        body: JSON.stringify(scanBody),
       });
       const data = await res.json();
 
@@ -320,12 +338,13 @@ export default function GenomeCapturePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           integration_id: selectedIntegration.id,
-          target_name: targetName || selectedCatalog || selectedEndpoint?.name || "Unknown",
-          target_type: targetType,
+          target_name: selectedApp?.name || selectedCatalog || targetName || "Unknown",
+          target_type: extractionType,
           depth: scanDepth,
-          raw_extraction: scanResult.raw_extraction || {},
+          raw_extraction: scanResult.raw_vendor_payload || scanResult.raw_extraction || {},
           genome_document: scanResult.genome_document || null,
           genome_graph: scanResult.genome_graph || null,
+          normalized_genome: scanResult.normalized_genome || null,
         }),
       });
       const data = await res.json();
@@ -363,8 +382,7 @@ export default function GenomeCapturePage() {
     switch (step) {
       case 1: return selectedIntegration?.enabled;
       case 2:
-        if (targetType === "service_catalog") return !!targetName;
-        return !!selectedEndpoint;
+        return extractionType === "service_catalog" ? !!selectedCatalog : !!selectedApp;
       case 3: return scanResult?.status === "ok";
       default: return false;
     }
@@ -529,49 +547,48 @@ export default function GenomeCapturePage() {
           {/* ============================================================== */}
           {step === 2 && selectedIntegration && (
             <div className="space-y-5">
-              {/* Target type */}
+              {/* Extraction type toggle */}
               <div>
                 <p className="text-sm text-gray-600 mb-3">What do you want to extract?</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {TARGET_TYPES.map((t) => {
-                    const Icon = t.icon;
-                    const sel = targetType === t.id;
-                    return (
-                      <button key={t.id} onClick={() => { setTargetType(t.id); setSelectedCatalog(""); setTargetName(""); }}
-                        className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-colors ${sel ? "border-gray-900 bg-gray-50" : "border-gray-200 hover:border-gray-300"}`}>
-                        <Icon className={`w-4 h-4 ${sel ? "text-gray-900" : "text-gray-400"}`} />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{t.label}</p>
-                          <p className="text-[10px] text-gray-500">{t.description}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div className="flex gap-2">
+                  <button onClick={() => { setExtractionType("application"); setSelectedCatalog(""); setTargetName(""); }}
+                    className={`flex-1 flex items-center gap-2 p-3 rounded-lg border-2 transition-colors ${extractionType === "application" ? "border-gray-900 bg-gray-50" : "border-gray-200 hover:border-gray-300"}`}>
+                    <FileCode className={`w-4 h-4 ${extractionType === "application" ? "text-gray-900" : "text-gray-400"}`} />
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-gray-900">Application</p>
+                      <p className="text-[10px] text-gray-500">Scoped app, tables, scripts</p>
+                    </div>
+                  </button>
+                  <button onClick={() => { setExtractionType("service_catalog"); setSelectedApp(null); setAppSearch(""); setTargetName(""); }}
+                    className={`flex-1 flex items-center gap-2 p-3 rounded-lg border-2 transition-colors ${extractionType === "service_catalog" ? "border-gray-900 bg-gray-50" : "border-gray-200 hover:border-gray-300"}`}>
+                    <Globe className={`w-4 h-4 ${extractionType === "service_catalog" ? "text-gray-900" : "text-gray-400"}`} />
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-gray-900">Service Catalog</p>
+                      <p className="text-[10px] text-gray-500">Catalog items, forms, variables</p>
+                    </div>
+                  </button>
                 </div>
               </div>
 
-              {/* Dynamic catalog discovery for Service Catalog */}
-              {targetType === "service_catalog" && (
+              {/* Service Catalog selection */}
+              {extractionType === "service_catalog" && (
                 <div>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Select a catalog discovered from{" "}
-                    <span className="font-medium">{selectedIntegration.name || selectedIntegration.integration_type}</span>
-                  </p>
+                  <p className="text-sm text-gray-600 mb-3">Select a service catalog</p>
                   {loadingCatalogs ? (
                     <div className="flex items-center gap-2 py-4 text-gray-400">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       <span className="text-sm">Discovering catalogs from ServiceNow...</span>
                     </div>
-                  ) : discoveredCatalogs.length > 0 ? (
+                  ) : catalogs.length > 0 ? (
                     <div className="grid grid-cols-1 gap-2">
-                      {discoveredCatalogs.map((cat) => {
+                      {catalogs.map((cat) => {
                         const sel = selectedCatalog === cat;
                         return (
                           <button key={cat} onClick={() => { setSelectedCatalog(cat); setTargetName(cat); }}
                             className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-colors ${
                               sel ? "border-teal-600 bg-teal-50" : "border-gray-200 hover:border-gray-300"
                             }`}>
-                            <Package className={`w-4 h-4 flex-shrink-0 ${sel ? "text-teal-600" : "text-gray-400"}`} />
+                            <Globe className={`w-4 h-4 flex-shrink-0 ${sel ? "text-teal-600" : "text-gray-400"}`} />
                             <span className="text-sm font-medium text-gray-900">{cat}</span>
                             {sel && <Check className="w-4 h-4 text-teal-600 ml-auto flex-shrink-0" />}
                           </button>
@@ -580,21 +597,127 @@ export default function GenomeCapturePage() {
                     </div>
                   ) : (
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                      <p className="text-xs text-amber-700">No catalogs discovered. Enter a target name manually below.</p>
+                      <p className="text-xs text-amber-700">No catalogs discovered.</p>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Endpoint selection (for non-catalog types or as fallback) */}
-              {targetType !== "service_catalog" && (
+              {/* Application search typeahead */}
+              {extractionType === "application" && (
+              <div>
+                <p className="text-sm text-gray-600 mb-3">
+                  Select an application from <span className="font-medium">{selectedIntegration.name || selectedIntegration.integration_type}</span>
+                </p>
+
+                {loadingApps ? (
+                  <div className="flex items-center gap-2 py-4 text-gray-400">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">Discovering applications from ServiceNow...</span>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    {/* Search input */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        value={appSearch}
+                        onChange={(e) => { setAppSearch(e.target.value); setAppDropdownOpen(true); }}
+                        onFocus={() => setAppDropdownOpen(true)}
+                        placeholder={`Search ${applications.length} applications...`}
+                        className="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                      />
+                      {selectedApp && (
+                        <button onClick={() => { setSelectedApp(null); setAppSearch(""); setTargetName(""); }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Selected app badge */}
+                    {selectedApp && (
+                      <div className="mt-2 flex items-center gap-3 p-3 bg-teal-50 border border-teal-200 rounded-lg">
+                        <FileCode className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{selectedApp.name}</p>
+                          <p className="text-xs text-gray-500 font-mono">{selectedApp.scope}</p>
+                        </div>
+                        {selectedApp.vendor && (
+                          <span className="text-[10px] bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">
+                            {selectedApp.vendor}
+                          </span>
+                        )}
+                        <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                      </div>
+                    )}
+
+                    {/* Dropdown results */}
+                    {appDropdownOpen && !selectedApp && appSearch.length >= 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        {(() => {
+                          const query = appSearch.toLowerCase();
+                          const filtered = applications.filter((a) =>
+                            a.name.toLowerCase().includes(query) ||
+                            a.scope.toLowerCase().includes(query) ||
+                            (a.vendor || "").toLowerCase().includes(query)
+                          ).slice(0, 50);
+
+                          if (filtered.length === 0) {
+                            return (
+                              <div className="p-3 text-sm text-gray-400 text-center">
+                                No matching applications
+                              </div>
+                            );
+                          }
+
+                          return filtered.map((a) => (
+                            <button
+                              key={a.sys_id}
+                              onClick={() => {
+                                setSelectedApp(a);
+                                setAppSearch(a.name);
+                                setTargetName(a.name);
+                                setAppDropdownOpen(false);
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0"
+                            >
+                              <FileCode className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-gray-900 truncate">{a.name}</p>
+                                <p className="text-[10px] text-gray-500 font-mono truncate">{a.scope}</p>
+                              </div>
+                              {a.vendor && (
+                                <span className="text-[10px] text-gray-400 flex-shrink-0">
+                                  {a.vendor}
+                                </span>
+                              )}
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Click outside to close */}
+                {appDropdownOpen && (
+                  <div className="fixed inset-0 z-0" onClick={() => setAppDropdownOpen(false)} />
+                )}
+              </div>
+              )}
+
+              {/* — end extraction type sections — */}
+
+              {/* Web service endpoint (optional override — application only) */}
+              {selectedApp && extractionType === "application" && (
                 <div>
-                  <p className="text-sm text-gray-600 mb-3">Select the web service endpoint to call.</p>
+                  <p className="text-sm text-gray-600 mb-3">Web service endpoint (optional)</p>
                   <div className="grid grid-cols-1 gap-2">
                     {selectedIntegration.endpoints.map((ep) => {
                       const sel = selectedEndpoint?.id === ep.id;
                       return (
-                        <button key={ep.id} onClick={() => { setSelectedEndpoint(ep); if (!targetName) setTargetName(ep.name); }}
+                        <button key={ep.id} onClick={() => setSelectedEndpoint(sel ? null : ep)}
                           className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-colors ${sel ? "border-gray-900 bg-gray-50" : "border-gray-200 hover:border-gray-300"}`}>
                           <Globe className={`w-4 h-4 flex-shrink-0 ${sel ? "text-gray-900" : "text-gray-400"}`} />
                           <div className="flex-1 min-w-0">
@@ -623,7 +746,7 @@ export default function GenomeCapturePage() {
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
                       <div className="flex gap-2">
                         <button onClick={addEndpoint} disabled={!newEpName || !newEpPath}
-                          className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg disabled:opacity-50">Add</button>
+                          className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50">Add</button>
                         <button onClick={() => setAddingEndpoint(false)}
                           className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg">Cancel</button>
                       </div>
@@ -632,46 +755,31 @@ export default function GenomeCapturePage() {
                 </div>
               )}
 
-              {/* Target name (auto-filled from catalog selection, editable) */}
-              <div>
-                <label className="text-sm text-gray-600 block mb-2">Target name</label>
-                <input value={targetName} onChange={(e) => setTargetName(e.target.value)}
-                  placeholder={targetType === "service_catalog" ? "Select a catalog above or type a name" : "e.g. Application name"}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
-              </div>
-
               {/* Scan depth */}
-              <div>
-                <p className="text-sm text-gray-600 mb-2">Scan depth</p>
-                <div className="flex gap-2">
-                  {SCAN_DEPTHS.map((d) => (
-                    <button key={d.id} onClick={() => setScanDepth(d.id)}
-                      className={`flex-1 p-3 rounded-lg border-2 text-center transition-colors ${scanDepth === d.id ? "border-gray-900 bg-gray-50" : "border-gray-200 hover:border-gray-300"}`}>
-                      <p className="text-sm font-medium text-gray-900">{d.label}</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">{d.description}</p>
-                    </button>
-                  ))}
+              {(selectedApp || selectedCatalog) && (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">Scan depth</p>
+                  <div className="flex gap-2">
+                    {SCAN_DEPTHS.map((d) => (
+                      <button key={d.id} onClick={() => setScanDepth(d.id)}
+                        className={`flex-1 p-3 rounded-lg border-2 text-center transition-colors ${scanDepth === d.id ? "border-gray-900 bg-gray-50" : "border-gray-200 hover:border-gray-300"}`}>
+                        <p className="text-sm font-medium text-gray-900">{d.label}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">{d.description}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Payload preview */}
-              {targetName && (
+              {selectedApp && extractionType === "application" && (
                 <div>
                   <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-2">Extraction Payload</p>
                   <div className="bg-gray-900 rounded-lg p-4 overflow-auto">
                     <pre className="text-xs font-mono text-emerald-400 whitespace-pre">{JSON.stringify({
-                      metadata: {
-                        tenant: TENANT,
-                        vendor: selectedIntegration.integration_type,
-                        application: targetType,
-                      },
-                      target: {
-                        type: targetType === "service_catalog" ? "catalog" : targetType,
-                        name: targetName,
-                      },
-                      scan: {
-                        depth: scanDepth,
-                      },
+                      metadata: { tenant: TENANT, vendor: selectedIntegration.integration_type, application: selectedApp!.scope },
+                      target: { type: "application", name: selectedApp!.name, scope: selectedApp!.scope },
+                      context: { scan_depth: scanDepth },
                     }, null, 2)}</pre>
                   </div>
                 </div>
@@ -682,10 +790,10 @@ export default function GenomeCapturePage() {
           {/* ============================================================== */}
           {/* STEP 3 — Genome Scan (Pass 1)                                  */}
           {/* ============================================================== */}
-          {step === 3 && selectedIntegration && (selectedEndpoint || targetType === "service_catalog") && (
+          {step === 3 && selectedIntegration && (selectedApp || selectedCatalog) && (
             <div className="space-y-6">
               <p className="text-sm text-gray-600">
-                Discovery pass — extract genome structure from <strong>{selectedIntegration.name || selectedIntegration.integration_type}</strong> via <strong>{selectedEndpoint?.name || targetName || "self-deploy extractor"}</strong>.
+                Discovery pass — extract genome structure from <strong>{selectedIntegration.name || selectedIntegration.integration_type}</strong> for <strong>{selectedApp?.name || selectedCatalog || targetName || "target"}</strong>.
               </p>
 
               {/* Pipeline flow diagram */}
@@ -695,7 +803,7 @@ export default function GenomeCapturePage() {
                   sublabel={selectedIntegration.config?.instance_url?.replace("https://", "")}
                   active={scanPipeline[0].status === "running"} done={scanPipeline[0].status === "done"} error={scanPipeline[0].status === "error"} />
                 <FlowArrow done={scanPipeline[1].status === "done"} active={scanPipeline[1].status === "running"} />
-                <FlowNode icon={Globe} label="Vendor Adapter" sublabel={selectedEndpoint?.path || `/extract/${targetName.toLowerCase().replace(/ /g, "_")}`}
+                <FlowNode icon={Globe} label="Vendor Adapter" sublabel={selectedEndpoint?.path || `/extract/${(selectedApp?.scope || selectedCatalog || "target").toLowerCase().replace(/ /g, "_")}`}
                   active={scanPipeline[1].status === "running"} done={scanPipeline[1].status === "done"} error={scanPipeline[1].status === "error"} />
                 <FlowArrow done={scanPipeline[2].status === "done"} active={scanPipeline[2].status === "running"} />
                 <FlowNode icon={Search} label="Genome Scan Engine" sublabel={`depth: ${scanDepth}`}
@@ -712,7 +820,7 @@ export default function GenomeCapturePage() {
               {!scanResult && (
                 <div className="flex justify-center">
                   <button onClick={runScan} disabled={scanning}
-                    className="flex items-center gap-2 px-6 py-2.5 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 font-semibold disabled:opacity-50">
+                    className="flex items-center gap-2 px-6 py-2.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-semibold disabled:opacity-50">
                     {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                     {scanning ? "Scanning..." : "Run Genome Scan"}
                   </button>
@@ -790,7 +898,7 @@ export default function GenomeCapturePage() {
               {commitDone && (
                 <div className="flex justify-center">
                   <button onClick={() => navigate("/genomes")}
-                    className="flex items-center gap-2 px-6 py-2.5 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 font-medium">
+                    className="flex items-center gap-2 px-6 py-2.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium">
                     <Dna className="w-4 h-4" /> View Genomes
                   </button>
                 </div>
@@ -809,13 +917,13 @@ export default function GenomeCapturePage() {
               </button>
               {step < 3 && (
                 <button onClick={() => setStep(step + 1)} disabled={!canAdvance()}
-                  className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50">
                   Next <ArrowRight className="w-4 h-4" />
                 </button>
               )}
               {step === 3 && scanResult?.status === "ok" && (
                 <button onClick={() => setStep(4)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800">
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
                   Expand & Commit <ArrowRight className="w-4 h-4" />
                 </button>
               )}

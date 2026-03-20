@@ -1,44 +1,33 @@
-"""Genome Capture Pipeline — two-pass extraction via vendor self-deploy adapters.
+"""Genome Capture Pipeline — orchestrates the three-service extraction flow.
 
-Pass 1 (Scan):   POST /extract → returns genome structure (GenomeDocument + GenomeGraph)
-Pass 2 (Expand): POST /expand  → returns full config/data for GitHub commit
+Pipeline:
+    ServiceNow
+       ↓
+    OYExtractorRegistryService    → Application Objects
+       ↓
+    OYGenomeBuilderService        → Genome YAML
+       ↓
+    OYGenomeGitHubService         → GitHub Commit
 
-GitHub repo structure:
-    genomes/tenants/{tenant}/vendors/{vendor}/{application}/
-        genome.yaml
-        graph.yaml
-        structure/
-        config/
-        data/
+Pass 1 (scan):   Extract + Build genome
+Pass 2 (expand): Commit to GitHub
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import time
 
-import httpx
-import yaml
-
-from services import servicenow_tools
+from services.oy_extractor_registry_service import extract as extractor_extract
+from services.oy_genome_builder_service import build_genome as builder_build
 from services.genome_builder import build_genome_from_extraction
-from services.snow_to_github import (
-    _load_github_targets,
-    _parse_repo_ref,
-    _ensure_repo,
-    _commit_files_to_repo,
-    _scrub_secrets,
-)
+from services.oy_genome_github_service import commit_genome as github_commit
 from adapters.servicenow_catalog_adapter import create_servicenow_extraction
 
 logger = logging.getLogger(__name__)
 
-_SNOW_TIMEOUT = 90
-
 
 # ---------------------------------------------------------------------------
-# Pass 1 — Genome Scan
+# Pass 1 — Scan: Extract → Build
 # ---------------------------------------------------------------------------
 
 
@@ -49,114 +38,128 @@ async def genome_scan(
     target_name: str,
     depth: str,
     app,
+    scope: str = "",
+    application: str = "",
 ) -> dict:
-    """Call the vendor adapter's /extract endpoint and build genome locally.
+    """Pass 1: Deploy extractor → Extract → Build genome.
 
-    Returns {status, genome_document, genome_graph, raw_extraction, summary}.
+    ServiceNow → OYExtractorRegistryService → OYGenomeBuilderService
     """
-    # Resolve integration credentials
+
+    # Step 1: OYExtractorRegistryService — deploy + extract
+    extraction = await extractor_extract(
+        tenant_id=tenant_id,
+        integration_id=integration_id,
+        target_type=target_type,
+        target_name=target_name,
+        depth=depth,
+        app=app,
+        scope=scope,
+        application=application,
+    )
+
+    if extraction["status"] != "ok":
+        return extraction
+
+    objects = extraction["objects"]
+    raw_vendor_payload = extraction["raw_vendor_payload"]
+    latency_ms = extraction["latency_ms"]
+    payload_size = extraction["payload_size"]
+
+    # Step 2: Feed into existing extraction pipeline (GenomeDocument + GenomeGraph)
     integration = await app.state.integration_store.get(integration_id)
-    if not integration:
-        return {"status": "error", "error": "Integration not found"}
+    vendor = integration.integration_type if integration else "unknown"
 
-    cfg = await servicenow_tools._get_snow_config(tenant_id, app)
-    instance_url = cfg["instance_url"]
-    auth_header = cfg["auth_header"]
-
-    # Build the extract endpoint URL
-    # Use the self-deploy extractor pattern: POST /api/1939459/overyonder_selfdeploy/extract/{key}
-    extractor_key = target_name.lower().replace(" ", "_")
-    extract_url = f"{instance_url}/api/1939459/overyonder_selfdeploy/extract/{extractor_key}"
-
-    logger.info("[genome_capture] Scan: POST %s (depth=%s)", extract_url, depth)
-
-    t0 = time.monotonic()
-    try:
-        async with httpx.AsyncClient(timeout=_SNOW_TIMEOUT) as client:
-            resp = await client.post(
-                extract_url,
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                    "Authorization": auth_header,
-                },
-                json={
-                    "target_type": target_type,
-                    "target_name": target_name,
-                    "depth": depth,
-                },
-            )
-    except Exception as exc:
-        latency_ms = int((time.monotonic() - t0) * 1000)
-        return {"status": "error", "error": f"ServiceNow unreachable ({latency_ms}ms): {exc}"}
-
-    latency_ms = int((time.monotonic() - t0) * 1000)
-
-    if not resp.is_success:
-        return {
-            "status": "error",
-            "error": f"ServiceNow HTTP {resp.status_code}",
-            "latency_ms": latency_ms,
-        }
-
-    try:
-        data = resp.json()
-    except Exception:
-        return {"status": "error", "error": "Non-JSON response from ServiceNow"}
-
-    # Check for ServiceNow-level errors
-    result_data = data.get("result", data)
-    if isinstance(result_data, dict) and result_data.get("status") == "error":
-        return {
-            "status": "error",
-            "error": result_data.get("message", "Extraction failed"),
-            "latency_ms": latency_ms,
-        }
-
-    # Feed into extraction pipeline to build GenomeDocument + GenomeGraph
+    extraction_id = None
     try:
         extraction_id = await create_servicenow_extraction(
-            tenant_id, target_name, result_data if isinstance(result_data, dict) else data, app,
+            tenant_id, target_name,
+            raw_vendor_payload if isinstance(raw_vendor_payload, dict) else {},
+            app,
         )
     except Exception as exc:
         logger.warning("[genome_capture] Extraction pipeline failed (non-blocking): %s", exc)
-        extraction_id = None
 
-    # Build genome locally for immediate preview
-    raw_result = result_data.get("result", result_data) if isinstance(result_data, dict) else result_data
+    # Build GenomeDocument + GenomeGraph from normalized objects
     genome_result = None
     try:
-        # Normalize the extraction payload for the genome builder
-        normalized = _normalize_scan_result(raw_result)
-        genome_result = build_genome_from_extraction(normalized, "servicenow")
+        normalized = _normalize_for_genome_builder(objects)
+        genome_result = build_genome_from_extraction(normalized, vendor)
     except Exception as exc:
-        logger.warning("[genome_capture] Genome build failed: %s", exc)
+        logger.warning("[genome_capture] GenomeDocument build failed: %s", exc)
 
-    # Build summary
-    summary = {}
-    if isinstance(raw_result, dict):
-        s = raw_result.get("summary", {})
-        summary = {
-            "items": int(s.get("item_count", 0)),
-            "variables": int(s.get("variable_count", 0)),
-            "choices": int(s.get("choice_count", 0)),
-        }
+    # Step 3: OYGenomeBuilderService — build canonical genome
+    normalized_genome = None
+    try:
+        normalized_genome = builder_build(
+            normalized_payload=objects,
+            application=target_name,
+            vendor_source=vendor,
+            tenant=tenant_id,
+        )
+        logger.info("[genome_capture] Canonical genome: %s", normalized_genome.get("summary"))
+    except Exception as exc:
+        logger.warning("[genome_capture] OYGenomeBuilderService failed (non-blocking): %s", exc)
+
+    # Build summary from raw payload
+    summary = _build_summary(raw_vendor_payload)
 
     return {
         "status": "ok",
         "extraction_id": extraction_id,
         "latency_ms": latency_ms,
-        "payload_size": len(resp.text),
+        "payload_size": payload_size,
         "summary": summary,
         "genome_document": genome_result["genome_document"].model_dump() if genome_result else None,
         "genome_graph": genome_result["genome_graph"].model_dump() if genome_result and genome_result.get("genome_graph") else None,
-        "raw_extraction": raw_result,
+        "raw_vendor_payload": raw_vendor_payload,
+        "normalized_genome": normalized_genome,
     }
 
 
-def _normalize_scan_result(raw: dict) -> dict:
-    """Normalize a self-deploy extraction result into the genome builder's expected format."""
-    items = raw.get("items", [])
+# ---------------------------------------------------------------------------
+# Pass 2 — Expand: Commit to GitHub
+# ---------------------------------------------------------------------------
+
+
+async def genome_expand_and_commit(
+    tenant_id: str,
+    integration_id: str,
+    target_name: str,
+    target_type: str,
+    depth: str,
+    raw_extraction: dict,
+    genome_document: dict | None,
+    genome_graph: dict | None,
+    normalized_genome: dict | None = None,
+    app=None,
+) -> dict:
+    """Pass 2: Commit genome artifacts to GitHub via OYGenomeGitHubService."""
+    integration = await app.state.integration_store.get(integration_id)
+    vendor = integration.integration_type if integration else "unknown"
+
+    return await github_commit(
+        tenant_id=tenant_id,
+        vendor=vendor,
+        application=target_name,
+        depth=depth,
+        normalized_genome=normalized_genome,
+        genome_document=genome_document,
+        genome_graph=genome_graph,
+        raw_vendor_payload=raw_extraction,
+        app=app,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _normalize_for_genome_builder(objects: dict) -> dict:
+    """Convert flattened application objects into the format expected by
+    the existing genome_builder (GenomeDocument pipeline)."""
+    items = objects.get("items", [])
     tables = []
     fields = []
     workflows = []
@@ -183,8 +186,23 @@ def _normalize_scan_result(raw: dict) -> dict:
         wf = item.get("workflow", "")
         if wf:
             workflows.append(f"{name} workflow")
-
         workflows.append(f"{name} request")
+
+    # Also pull from top-level keys if present (non-catalog extractions)
+    for t in objects.get("tables", []):
+        name = t if isinstance(t, str) else t.get("name", "")
+        if name and name not in tables:
+            tables.append(name)
+
+    for f in objects.get("fields", []):
+        name = f if isinstance(f, str) else f.get("name", "")
+        if name and name not in fields:
+            fields.append(name)
+
+    for w in objects.get("flows", objects.get("workflows", [])):
+        name = w if isinstance(w, str) else w.get("name", "")
+        if name and name not in workflows:
+            workflows.append(name)
 
     return {
         "tables": tables,
@@ -194,142 +212,31 @@ def _normalize_scan_result(raw: dict) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Pass 2 — Expand & Commit to GitHub
-# ---------------------------------------------------------------------------
+def _build_summary(raw: dict) -> dict:
+    """Extract summary counts from raw vendor payload."""
+    if not isinstance(raw, dict):
+        return {}
 
-
-async def genome_expand_and_commit(
-    tenant_id: str,
-    integration_id: str,
-    target_name: str,
-    target_type: str,
-    depth: str,
-    raw_extraction: dict,
-    genome_document: dict | None,
-    genome_graph: dict | None,
-    app,
-) -> dict:
-    """Build the GitHub file tree and commit.
-
-    Uses the raw extraction from Pass 1 to build YAML/JSON files in the
-    prescribed directory structure.
-    """
-    # Resolve GitHub target (auto-select first available)
-    targets = await _load_github_targets(tenant_id, app)
-    if not targets:
-        return {"status": "error", "error": "No GitHub integration configured"}
-
-    target = targets[0]
-    if not target.token:
-        return {"status": "error", "error": "GitHub integration has no access token"}
-
-    owner, repo_name = _parse_repo_ref(target.default_repo, target.org)
-    if not owner:
-        return {"status": "error", "error": "GitHub integration missing org/owner"}
-
-    headers = {
-        "Authorization": f"Bearer {target.token}",
-        "Accept": "application/vnd.github+json",
-    }
-
-    # Resolve integration for vendor name
-    integration = await app.state.integration_store.get(integration_id)
-    vendor = integration.integration_type if integration else "unknown"
-
-    # Build file tree
-    app_slug = target_name.lower().replace(" ", "_").replace("/", "_")
-    base = f"genomes/tenants/{tenant_id}/vendors/{vendor}/{app_slug}"
-
-    files: dict[str, str] = {}
-
-    # genome.yaml — the flat GenomeDocument
-    if genome_document:
-        files[f"{base}/genome.yaml"] = yaml.dump(genome_document, default_flow_style=False, sort_keys=False)
-
-    # graph.yaml — the structured GenomeGraph
-    if genome_graph:
-        files[f"{base}/graph.yaml"] = yaml.dump(genome_graph, default_flow_style=False, sort_keys=False)
-
-    # structure/ — catalog items as individual YAML files
-    items = raw_extraction.get("items", []) if isinstance(raw_extraction, dict) else []
-    for item in items:
-        item_name = item.get("name", "unknown")
-        item_slug = item_name.lower().replace(" ", "_").replace("(", "").replace(")", "")
-        structure_data = {
-            "name": item_name,
-            "category": item.get("category", ""),
-            "description": item.get("short_description", item.get("description", "")),
-            "active": item.get("active", True),
-            "variables": [
-                {
-                    "name": v.get("name", ""),
-                    "type": v.get("type", ""),
-                    "mandatory": v.get("mandatory", False),
-                    "question": v.get("question_text", ""),
-                }
-                for v in item.get("variables", [])
-                if v.get("name")
-            ],
+    # Self-deploy extractor format
+    s = raw.get("summary", {})
+    if s:
+        return {
+            "items": int(s.get("item_count", 0)),
+            "variables": int(s.get("variable_count", 0)),
+            "choices": int(s.get("choice_count", 0)),
         }
-        files[f"{base}/structure/{item_slug}.yaml"] = yaml.dump(
-            structure_data, default_flow_style=False, sort_keys=False,
+
+    # Catalog By Title format
+    items = raw.get("items", [])
+    if items:
+        var_count = sum(
+            len(item.get("variables", item.get("item", {}).get("variables", [])) if isinstance(item, dict) else [])
+            for item in items
         )
+        return {
+            "items": len(items),
+            "variables": var_count,
+            "choices": 0,
+        }
 
-    # config/ — pricing and workflow config
-    config_items = []
-    for item in items:
-        cfg = {"name": item.get("name", "")}
-        if item.get("price"):
-            cfg["price"] = item["price"]
-        if item.get("recurring_price"):
-            cfg["recurring_price"] = item["recurring_price"]
-        if item.get("workflow"):
-            cfg["workflow"] = item["workflow"]
-        config_items.append(cfg)
-    if config_items:
-        files[f"{base}/config/catalog_config.yaml"] = yaml.dump(
-            config_items, default_flow_style=False, sort_keys=False,
-        )
-
-    # data/ — raw extraction JSON
-    if raw_extraction:
-        files[f"{base}/data/raw_extraction.json"] = json.dumps(raw_extraction, indent=2)
-
-    # Scrub secrets from all files
-    files = {path: _scrub_secrets(content) for path, content in files.items()}
-
-    # Ensure repo and commit
-    repo = await _ensure_repo(owner, repo_name, headers, description=f"Genome: {target_name}")
-    if not repo["ok"]:
-        return {"status": "error", "error": repo["error"]}
-
-    commit_msg = (
-        f"Capture genome\n\n"
-        f"Tenant: {tenant_id}\n"
-        f"Vendor: {vendor}\n"
-        f"Application: {target_name}\n"
-        f"Depth: {depth}"
-    )
-
-    # Override the default commit message for this pipeline
-    import services.snow_to_github as _gh
-    original_msg = _gh.COMMIT_MESSAGE
-    _gh.COMMIT_MESSAGE = commit_msg
-
-    result = await _commit_files_to_repo(owner, repo_name, files, headers)
-
-    _gh.COMMIT_MESSAGE = original_msg  # restore
-
-    if not result["pushed"]:
-        return {"status": "error", "error": "Failed to commit files to GitHub", "errors": result.get("errors", [])}
-
-    logger.info("[genome_capture] Committed %d files to %s/%s", len(result["pushed"]), owner, repo_name)
-
-    return {
-        "status": "ok",
-        "repo_url": repo["repo_url"],
-        "commit_hash": result["commit_hash"],
-        "files_pushed": result["pushed"],
-        "file_count": len(result["pushed"]),
-    }
+    return {}

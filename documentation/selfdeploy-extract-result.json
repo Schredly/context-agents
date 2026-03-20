@@ -1,0 +1,644 @@
+{
+    "result": {
+        "status": "success",
+        "extractor_key": "catalog_test",
+        "extractor_type": "catalog_genome",
+        "result": {
+            "extraction_type": "catalog_genome",
+            "extracted_at": "2026-03-17 10:05:43",
+            "catalog": {
+                "sys_id": "742ce428d7211100f2d224837e61036d",
+                "title": "Technical Catalog",
+                "description": "Products and services for the IT department",
+                "active": true
+            },
+            "summary": {
+                "item_count": 8.0,
+                "variable_count": 32.0,
+                "choice_count": 31.0
+            },
+            "items": [
+                {
+                    "sys_id": "a9a3ae4f0a0a0aa700a24a296c2ceac4",
+                    "name": "Application Server (Standard)",
+                    "short_description": "Dell 1950 (1U) Rack Mount Server",
+                    "description": "Corporate application server Standard Default configuration includes: 4GB RAM 2 X 70G SCSI drives (Raid 0) Up to 250G of SAN storage (specify) Linux or Windows XP (specify) Recommended Use: Application or Web server",
+                    "category": "Infrastructure",
+                    "active": true,
+                    "price": "5600",
+                    "recurring_price": "0",
+                    "workflow": "",
+                    "variables": [
+                        {
+                            "sys_id": "a9d5b9f90a0a0aa7006e8e9d5908059b",
+                            "name": "project_code",
+                            "question_text": "Which project code is this server to be billed to?",
+                            "type": "Single Line Text",
+                            "mandatory": false,
+                            "order": "0",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "a9d532a10a0a0aa700f2682123c8ce3c",
+                            "name": "budget_code",
+                            "question_text": "What budget code should this server be billed to?",
+                            "type": "Single Line Text",
+                            "mandatory": false,
+                            "order": "50",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "a9b41f6b0a0a0aa700796a624f41e58d",
+                            "name": "OS",
+                            "question_text": "Please Specify an Operating System",
+                            "type": "Multiple Choice",
+                            "mandatory": false,
+                            "order": "100",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": [
+                                {
+                                    "text": "Red Hat Enterprise Linux 5.0",
+                                    "value": "rh_el_50",
+                                    "order": "100"
+                                },
+                                {
+                                    "text": "Windows XP SP 2",
+                                    "value": "windows_xp",
+                                    "order": "200"
+                                }
+                            ]
+                        },
+                        {
+                            "sys_id": "a9b72fee0a0a0aa700aa18f84a7087c9",
+                            "name": "san",
+                            "question_text": "How much (if any) SAN Storage is required?",
+                            "type": "Single Line Text",
+                            "mandatory": false,
+                            "order": "200",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        }
+                    ]
+                },
+                {
+                    "sys_id": "81c887819f203100d8f8700c267fcfb5",
+                    "name": "Request Knowledge Base",
+                    "short_description": "Request for a Knowledge Base",
+                    "description": "Here you can request a new Knowledge Base to be used. A Knowledge Base can be used to store Knowledge in an organization and anyone can request for a new one to be created.",
+                    "category": "Can We Help You?",
+                    "active": true,
+                    "price": "0",
+                    "recurring_price": "0",
+                    "workflow": "",
+                    "variables": [
+                        {
+                            "sys_id": "4e92cf349f203100d8f8700c267fcfe4",
+                            "name": "request_reason",
+                            "question_text": "What is the reason for this Knowledge Base to be created?",
+                            "type": "Multi Line Text",
+                            "mandatory": false,
+                            "order": null,
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "9abeb6349f203100d8f8700c267fcf0b",
+                            "name": "requested_title",
+                            "question_text": "What is the name of the Knowledge Base?",
+                            "type": "Single Line Text",
+                            "mandatory": false,
+                            "order": null,
+                            "help_text": "",
+                            "default_value": "My New Knowledge Base",
+                            "choices": []
+                        }
+                    ]
+                },
+                {
+                    "sys_id": "4ab3477b0a0a0b99008c1fc344d3d44f",
+                    "name": "Server Reboot",
+                    "short_description": "Schedule a Server Reboot",
+                    "description": "Service Overview: Please use the form below to request a server reboot. Please be aware that reboots of production servers may require additional documentation.",
+                    "category": "Emergency Changes",
+                    "active": false,
+                    "price": "0",
+                    "recurring_price": "0",
+                    "workflow": "",
+                    "variables": [
+                        {
+                            "sys_id": "4b258d330a0a0b99008ffa39cbf2c156",
+                            "name": "server_details",
+                            "question_text": null,
+                            "type": "Container Start",
+                            "mandatory": false,
+                            "order": "50",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "4ab4f2910a0a0b9900eca432e7279f9b",
+                            "name": "cmdb_ci",
+                            "question_text": "Server to reboot",
+                            "type": "Reference",
+                            "mandatory": true,
+                            "order": "100",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "4ab8ef520a0a0b99004c308842f72fa5",
+                            "name": "reboot_date",
+                            "question_text": "Desired date and time of reboot",
+                            "type": "Date/Time",
+                            "mandatory": false,
+                            "order": "200",
+                            "help_text": "",
+                            "default_value": "javascript:gs.nowDateTime();",
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "4b263a610a0a0b99007afd99240648ed",
+                            "name": null,
+                            "question_text": null,
+                            "type": "Container End",
+                            "mandatory": false,
+                            "order": "300",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "4abbf2580a0a0b99003c1c0dc50f575b",
+                            "name": "reason",
+                            "question_text": "Reason for reboot",
+                            "type": "Multiple Choice",
+                            "mandatory": false,
+                            "order": "400",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": [
+                                {
+                                    "text": "Server is hung, locked, or otherwise not functioning properly\n\t\t",
+                                    "value": "broken",
+                                    "order": "100"
+                                },
+                                {
+                                    "text": "Software install requires reboot",
+                                    "value": "install",
+                                    "order": "200"
+                                },
+                                {
+                                    "text": "Preventive maintenance",
+                                    "value": "preventive",
+                                    "order": "300"
+                                },
+                                {
+                                    "text": "Other",
+                                    "value": "other",
+                                    "order": "400"
+                                }
+                            ]
+                        },
+                        {
+                            "sys_id": "4abe5e400a0a0b99006c52502eb20e50",
+                            "name": "reason_details",
+                            "question_text": "Detailed reason for reboot",
+                            "type": "Multi Line Text",
+                            "mandatory": false,
+                            "order": "500",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        }
+                    ]
+                },
+                {
+                    "sys_id": "a9da93400a0a0aa70030fb3e7787e7a7",
+                    "name": "Database Server & Oracle License",
+                    "short_description": "Dell 6850 (4U) Rack Mount Server",
+                    "description": "Corporate database server (Standard) Default configuration includes: 64GB RAM 2 X 70G SCSI drives (Raid 0) Up to 1 TB of SAN Storage (specify in request) Linux or Windows XP (specify) Oracle 10g R2",
+                    "category": "Infrastructure",
+                    "active": true,
+                    "price": "27000",
+                    "recurring_price": "0",
+                    "workflow": "",
+                    "variables": [
+                        {
+                            "sys_id": "a9da94310a0a0aa70066acd8ef432f9a",
+                            "name": "project_code",
+                            "question_text": "Which project code is this server to be billed to?",
+                            "type": "Single Line Text",
+                            "mandatory": false,
+                            "order": "0",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "a9da940e0a0a0aa70066acd82937378f",
+                            "name": "budget_code",
+                            "question_text": "What budget code should this server be billed to?",
+                            "type": "Single Line Text",
+                            "mandatory": false,
+                            "order": "50",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "a9da93a00a0a0aa70066acd8489058ca",
+                            "name": "OS",
+                            "question_text": "Please Specify an Operating System",
+                            "type": "Multiple Choice",
+                            "mandatory": false,
+                            "order": "100",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": [
+                                {
+                                    "text": "Red Hat Enterprise Linux 5.0 (64 bit)",
+                                    "value": "rh_el_50_64",
+                                    "order": "100"
+                                },
+                                {
+                                    "text": "Windows XP SP 2 (64 bit)",
+                                    "value": "windows_xp_64",
+                                    "order": "200"
+                                }
+                            ]
+                        },
+                        {
+                            "sys_id": "a9da93cd0a0a0aa70066acd8063e3485",
+                            "name": "san",
+                            "question_text": "How much (if any) SAN Storage is required?",
+                            "type": "Single Line Text",
+                            "mandatory": false,
+                            "order": "200",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        }
+                    ]
+                },
+                {
+                    "sys_id": "508b6735c0a800050056c0334b734118",
+                    "name": "Database Restore",
+                    "short_description": "Database Restore",
+                    "description": "Please fill in the information below to request a restore of a database. Please be aware that restores of a production instance will require additional approvals.",
+                    "category": "Emergency Changes",
+                    "active": false,
+                    "price": "0",
+                    "recurring_price": "0",
+                    "workflow": "",
+                    "variables": [
+                        {
+                            "sys_id": "50926071c0a800050064ec9c08069f1f",
+                            "name": "cmdb_ci",
+                            "question_text": "Database to restore",
+                            "type": "Reference",
+                            "mandatory": true,
+                            "order": "100",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "539a25c1c0a8000500eee7090ae3739e",
+                            "name": "con",
+                            "question_text": null,
+                            "type": "Container Start",
+                            "mandatory": false,
+                            "order": "150",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "5370c82ac0a800050067949d95a5e10f",
+                            "name": "backup_source",
+                            "question_text": "Restore from this source",
+                            "type": "Reference",
+                            "mandatory": false,
+                            "order": "200",
+                            "help_text": "Specify the database from which you wish to restore. The default is to restore a database from its own backups, but you can specify a different database to be your restore source as well. This allows you to replace one database with a recent backup of another, which is often useful for setting up test systems.",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "5371a95bc0a8000500464f652cc4b3c4",
+                            "name": "restore_pit",
+                            "question_text": "Restore from this point in time",
+                            "type": "Date/Time",
+                            "mandatory": false,
+                            "order": "300",
+                            "help_text": "Indicate which point in time you wish to restore from. Default (if you leave this blank) is to restore from the most recent available backup. However, it is possible to restore from an earlier point in time if necessary.",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "539a7bb8c0a8000500c12b03e4042e9b",
+                            "name": null,
+                            "question_text": null,
+                            "type": "Container End",
+                            "mandatory": false,
+                            "order": "350",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "53740c8dc0a80005008f5813f740c693",
+                            "name": "reason",
+                            "question_text": "Reason for restore",
+                            "type": "Multiple Choice",
+                            "mandatory": false,
+                            "order": "400",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": [
+                                {
+                                    "text": "Recover from hardware failure",
+                                    "value": "hardware_failure",
+                                    "order": "100"
+                                },
+                                {
+                                    "text": "Recover from application error/data corruption",
+                                    "value": "software_error",
+                                    "order": "200"
+                                },
+                                {
+                                    "text": "Migration, Maintenance or Testing",
+                                    "value": "testing",
+                                    "order": "300"
+                                },
+                                {
+                                    "text": "Other",
+                                    "value": "other",
+                                    "order": "400"
+                                }
+                            ]
+                        },
+                        {
+                            "sys_id": "53766e7dc0a8000500022e78a96e8868",
+                            "name": "reason_details",
+                            "question_text": "Detailed reason for restore",
+                            "type": "Multi Line Text",
+                            "mandatory": false,
+                            "order": "500",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        }
+                    ]
+                },
+                {
+                    "sys_id": "a9d7f3790a0a0aa700f68277bf62a054",
+                    "name": "Application Server (Large)",
+                    "short_description": "Dell 2950 (2U) Rack Mount Server",
+                    "description": "Corporate application server (Large) Default configuration includes: 16GB RAM 2 X 70G SCSI drives (Raid 0) Up to 500G of SAN storage (specify) Linux or Windows XP (specify) Recommended Use: Application server for applications with high transaction volume.",
+                    "category": "Infrastructure",
+                    "active": true,
+                    "price": "5600",
+                    "recurring_price": "0",
+                    "workflow": "",
+                    "variables": [
+                        {
+                            "sys_id": "a9d7f4fc0a0a0aa70008f4bc944e146c",
+                            "name": "project_code",
+                            "question_text": "Which project code is this server to be billed to?",
+                            "type": "Single Line Text",
+                            "mandatory": false,
+                            "order": "0",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "a9d7f4d00a0a0aa70008f4bcde0c6461",
+                            "name": "budget_code",
+                            "question_text": "What budget code should this server be billed to?",
+                            "type": "Single Line Text",
+                            "mandatory": false,
+                            "order": "50",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        },
+                        {
+                            "sys_id": "a9d7f3f30a0a0aa70008f4bcba3c0491",
+                            "name": "OS",
+                            "question_text": "Please Specify an Operating System",
+                            "type": "Multiple Choice",
+                            "mandatory": false,
+                            "order": "100",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": [
+                                {
+                                    "text": "Red Hat Enterprise Linux 5.0",
+                                    "value": "rh_el_50",
+                                    "order": "100"
+                                },
+                                {
+                                    "text": "Windows XP SP 2",
+                                    "value": "windows_xp",
+                                    "order": "200"
+                                }
+                            ]
+                        },
+                        {
+                            "sys_id": "a9d7f4940a0a0aa70008f4bc6f667726",
+                            "name": "san",
+                            "question_text": "How much (if any) SAN Storage is required?",
+                            "type": "Single Line Text",
+                            "mandatory": false,
+                            "order": "200",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        }
+                    ]
+                },
+                {
+                    "sys_id": "d67a86b6c0a80165009386c752cd4a09",
+                    "name": "Email Account (old)",
+                    "short_description": "Standard email service with Outlook and Outlook Web",
+                    "description": "Services Overview: Corporate email supports both the outlook client as well as outlook web access (OWA). This comes pre-installed on all users corporate issued devices. Services Overview: 24/7 Monitoring End user support",
+                    "category": "Services",
+                    "active": false,
+                    "price": "0",
+                    "recurring_price": "0",
+                    "workflow": "",
+                    "variables": [
+                        {
+                            "sys_id": "f3776a6bc0a8010a003825c718850fa2",
+                            "name": "is_this_a_new_account",
+                            "question_text": "Is this a new account ?",
+                            "type": "Select Box",
+                            "mandatory": false,
+                            "order": "-1",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": [
+                                {
+                                    "text": "Yes",
+                                    "value": "Yes",
+                                    "order": "100"
+                                },
+                                {
+                                    "text": "No",
+                                    "value": "No",
+                                    "order": "100"
+                                }
+                            ]
+                        },
+                        {
+                            "sys_id": "f3776a9ac0a8010a003825c7b593ba10",
+                            "name": "special_requirements",
+                            "question_text": "Special Requirements",
+                            "type": "Multi Line Text",
+                            "mandatory": false,
+                            "order": "200",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": []
+                        }
+                    ]
+                },
+                {
+                    "sys_id": "f3937ada4fff0200086eeed18110c7f2",
+                    "name": "VM Provisioning",
+                    "short_description": "Do you need a Virtual Machine?",
+                    "description": "This service provides support and administration of a VMware virtual server running a supported Linux server operating system. Configuration changes will be handled as requested. Services Include: Linux Environment Standard 50 GB of Storage, 4 GB of RAM Additional CPUs, Storage, and RAM available upon request Alerting and Monitoring",
+                    "category": "Services",
+                    "active": true,
+                    "price": "0",
+                    "recurring_price": "0",
+                    "workflow": "",
+                    "variables": [
+                        {
+                            "sys_id": "7512cc3f4ff38200086eeed18110c78e",
+                            "name": "cpu",
+                            "question_text": "How many CPUs?",
+                            "type": "Select Box",
+                            "mandatory": false,
+                            "order": "100",
+                            "help_text": "",
+                            "default_value": "1",
+                            "choices": [
+                                {
+                                    "text": "1",
+                                    "value": "1",
+                                    "order": "100"
+                                },
+                                {
+                                    "text": "2",
+                                    "value": "2",
+                                    "order": "200"
+                                },
+                                {
+                                    "text": "4",
+                                    "value": "4",
+                                    "order": "300"
+                                },
+                                {
+                                    "text": "6",
+                                    "value": "6",
+                                    "order": "400"
+                                },
+                                {
+                                    "text": "8",
+                                    "value": "8",
+                                    "order": "500"
+                                }
+                            ]
+                        },
+                        {
+                            "sys_id": "0d13c07f4ff38200086eeed18110c78d",
+                            "name": "ram",
+                            "question_text": "How much RAM?",
+                            "type": "Select Box",
+                            "mandatory": false,
+                            "order": "200",
+                            "help_text": "",
+                            "default_value": "4",
+                            "choices": [
+                                {
+                                    "text": "2 GB",
+                                    "value": "2",
+                                    "order": "100"
+                                },
+                                {
+                                    "text": "4 GB",
+                                    "value": "4",
+                                    "order": "200"
+                                },
+                                {
+                                    "text": "8 GB",
+                                    "value": "8",
+                                    "order": "300"
+                                },
+                                {
+                                    "text": "16 GB",
+                                    "value": "16",
+                                    "order": "400"
+                                }
+                            ]
+                        },
+                        {
+                            "sys_id": "dc74487f4ff38200086eeed18110c79d",
+                            "name": "storage",
+                            "question_text": "Amount of storage?",
+                            "type": "Select Box",
+                            "mandatory": false,
+                            "order": "300",
+                            "help_text": "",
+                            "default_value": null,
+                            "choices": [
+                                {
+                                    "text": "40 GB",
+                                    "value": "40 GB",
+                                    "order": "100"
+                                },
+                                {
+                                    "text": "80 GB",
+                                    "value": "80 GB",
+                                    "order": "200"
+                                },
+                                {
+                                    "text": "300 GB",
+                                    "value": "300 GB",
+                                    "order": "300"
+                                },
+                                {
+                                    "text": "500 GB",
+                                    "value": "500 GB",
+                                    "order": "400"
+                                },
+                                {
+                                    "text": "1 TB",
+                                    "value": "1 TB",
+                                    "order": "500"
+                                },
+                                {
+                                    "text": "3 TB",
+                                    "value": "3 TB",
+                                    "order": "600"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}

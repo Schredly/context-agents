@@ -94,6 +94,38 @@ async def discover_genome_candidates(tenant_id: str, request: Request):
     return results
 
 
+@router.get("/discover/applications")
+async def discover_applications(tenant_id: str, request: Request):
+    """Fetch discoverable applications from ServiceNow via self-deploy extractor."""
+    await _require_tenant(tenant_id, request)
+    from services import servicenow_tools
+    from services.snow_to_replit import _fetch_catalog
+
+    cfg = await servicenow_tools._get_snow_config(tenant_id, request.app)
+    url = await servicenow_tools.get_endpoint_url(tenant_id, "List Applications", request.app)
+    if not url:
+        # Fallback: build URL directly
+        instance_url = cfg["instance_url"]
+        url = f"{instance_url}/api/1939459/overyonder_selfdeploy/extract/applications"
+
+    try:
+        resp = await _fetch_catalog(url, cfg["auth_header"])
+    except Exception as exc:
+        return {"status": "error", "error": str(exc), "applications": []}
+
+    if not resp.is_success:
+        return {"status": "error", "error": f"HTTP {resp.status_code}", "applications": []}
+
+    try:
+        data = resp.json()
+    except Exception:
+        return {"status": "error", "error": "Non-JSON response", "applications": []}
+
+    result = data.get("result", data)
+    apps = result.get("applications", []) if isinstance(result, dict) else []
+    return {"status": "ok", "applications": apps, "count": len(apps)}
+
+
 class CaptureGenomeRequest(BaseModel):
     candidate_id: str
     candidate_name: str
@@ -119,6 +151,8 @@ class GenomeScanRequest(BaseModel):
     target_type: str = "service_catalog"
     target_name: str
     depth: str = "structure"
+    scope: str = ""
+    application: str = ""
 
 
 @router.post("/capture/scan")
@@ -131,6 +165,8 @@ async def scan_genome(tenant_id: str, body: GenomeScanRequest, request: Request)
         target_type=body.target_type,
         target_name=body.target_name,
         depth=body.depth,
+        scope=body.scope,
+        application=body.application,
         app=request.app,
     )
 
@@ -143,6 +179,7 @@ class GenomeExpandRequest(BaseModel):
     raw_extraction: dict = {}
     genome_document: dict | None = None
     genome_graph: dict | None = None
+    normalized_genome: dict | None = None
 
 
 @router.post("/capture/expand")
@@ -158,8 +195,30 @@ async def expand_and_commit_genome(tenant_id: str, body: GenomeExpandRequest, re
         raw_extraction=body.raw_extraction,
         genome_document=body.genome_document,
         genome_graph=body.genome_graph,
+        normalized_genome=body.normalized_genome,
         app=request.app,
     )
+
+
+class UpdateGenomeRequest(BaseModel):
+    legacy_cost: float | None = None
+    migrated_cost: float | None = None
+    operational_cost: float | None = None
+    target_platform: str | None = None
+    category: str | None = None
+
+
+@router.patch("/{genome_id}")
+async def update_genome(tenant_id: str, genome_id: str, body: UpdateGenomeRequest, request: Request):
+    """Update editable fields on a genome (costs, target platform, category)."""
+    await _require_tenant(tenant_id, request)
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    updated = await request.app.state.genome_store.update(genome_id, **updates)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Genome not found")
+    return updated
 
 
 @router.delete("/{genome_id}", status_code=204)

@@ -35,45 +35,45 @@ export function AgentReasoning({ steps, title = "Agent Reasoning" }: AgentReason
   const getStatusIndicator = (status: ReasoningStatus) => {
     switch (status) {
       case "completed":
-        return <div className="w-2 h-2 rounded-full bg-[#59C3C3]" />;
+        return <div className="w-2 h-2 rounded-full bg-orange-400" />;
       case "running":
-        return <Loader2 className="w-3.5 h-3.5 text-[#2E86AB] animate-spin" />;
+        return <Loader2 className="w-3.5 h-3.5 text-orange-600 animate-spin" />;
       case "pending":
-        return <div className="w-2 h-2 rounded-full bg-[#2F5F7A] border border-[#2F5F7A]" />;
+        return <div className="w-2 h-2 rounded-full bg-gray-200 border border-gray-200" />;
     }
   };
 
   const getStepStyles = (status: ReasoningStatus) => {
     switch (status) {
       case "completed":
-        return "text-[#C7D2DA] border-[#2F5F7A]";
+        return "text-gray-600 border-gray-200";
       case "running":
-        return "text-[#F1F5F9] border-[#2F5F7A] bg-[#102A43]";
+        return "text-gray-900 border-gray-200 bg-gray-50";
       case "pending":
-        return "text-[#8FA7B5] border-[#2F5F7A]";
+        return "text-gray-500 border-gray-200";
     }
   };
 
   const getIconColor = (status: ReasoningStatus) => {
     switch (status) {
       case "completed":
-        return "text-[#59C3C3] bg-[#59C3C3]/10";
+        return "text-orange-500 bg-orange-400/10";
       case "running":
-        return "text-[#2E86AB] bg-[#2E86AB]/10";
+        return "text-orange-600 bg-orange-500/10";
       case "pending":
-        return "text-[#8FA7B5] bg-[#102A43]";
+        return "text-gray-500 bg-gray-50";
     }
   };
 
   return (
-    <div className="bg-[#0B1E2D] border border-[#2F5F7A] rounded-[10px] overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-[10px] overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-[#2F5F7A]">
-        <h3 className="text-[#F1F5F9] text-sm font-medium flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#2E86AB]" />
+      <div className="px-4 py-3 border-b border-gray-200">
+        <h3 className="text-gray-900 text-sm font-medium flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
           {title}
         </h3>
-        <p className="text-xs text-[#8FA7B5] mt-0.5">
+        <p className="text-xs text-gray-500 mt-0.5">
           Step-by-step decision trace
         </p>
       </div>
@@ -89,7 +89,7 @@ export function AgentReasoning({ steps, title = "Agent Reasoning" }: AgentReason
             return (
               <div key={step.id} className="relative">
                 {!isLast && (
-                  <div className="absolute left-[21px] top-[42px] w-px h-[calc(100%+4px)] bg-[#2F5F7A]" />
+                  <div className="absolute left-[21px] top-[42px] w-px h-[calc(100%+4px)] bg-gray-200" />
                 )}
 
                 <div
@@ -122,24 +122,24 @@ export function AgentReasoning({ steps, title = "Agent Reasoning" }: AgentReason
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2.5 border-t border-[#2F5F7A]">
+      <div className="px-4 py-2.5 border-t border-gray-200">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-[#8FA7B5]">
+          <span className="text-gray-500">
             {steps.filter((s) => s.status === "completed").length} of{" "}
             {steps.length} steps completed
           </span>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#59C3C3]" />
-              <span className="text-[#8FA7B5]">Done</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+              <span className="text-gray-500">Done</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#2E86AB]" />
-              <span className="text-[#8FA7B5]">Active</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+              <span className="text-gray-500">Active</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#2F5F7A]" />
-              <span className="text-[#8FA7B5]">Pending</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-gray-200" />
+              <span className="text-gray-500">Pending</span>
             </div>
           </div>
         </div>
