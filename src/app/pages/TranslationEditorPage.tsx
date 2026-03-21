@@ -26,7 +26,7 @@ const EMPTY_FORM: TranslationForm = {
 };
 
 const VENDORS = ["ServiceNow", "Salesforce", "Jira", "Zendesk", "Workday", "GitHub"];
-const PLATFORMS = ["replit", "github", "salesforce", "azure-devops", "freshdesk", "custom"];
+const PLATFORMS = ["Replit", "GitHub", "Salesforce", "ServiceNow", "Azure DevOps", "Freshdesk", "Custom"];
 
 export default function TranslationEditorPage() {
   const { id } = useParams();

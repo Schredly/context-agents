@@ -968,6 +968,33 @@ class Translation(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class VideoGenomeExtraction(BaseModel):
+    id: str
+    tenant_id: str = "acme"
+    video_id: str
+    video_filename: str = ""
+    video_size_mb: float = 0.0
+    application_name: str = ""
+    vendor: str = ""
+    status: str = "pending"          # pending | processing | completed | error
+    agent_progress: dict = Field(default_factory=dict)
+    genome: Optional[dict] = None
+    ui_analysis: Optional[list] = None   # per-screen UI extraction results
+    audio_transcript: Optional[dict] = None
+    design_tokens: Optional[dict] = None  # color palette, typography, spacing
+    error: Optional[str] = None
+    frame_count: int = 0
+    unique_screens: int = 0
+    has_audio: bool = False
+    total_tokens: int = 0
+    total_cost: float = 0.0
+    latency_ms: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    committed: bool = False
+    commit_result: Optional[dict] = None
+
+
 class CreateTranslationRequest(BaseModel):
     name: str
     description: str = ""

@@ -31,6 +31,7 @@ from models import (
     Translation,
     UseCase,
     UseCaseRun,
+    VideoGenomeExtraction,
 )
 from store.interface import (
     ActionStore,
@@ -58,6 +59,7 @@ from store.interface import (
     TranslationStore,
     UseCaseRunStore,
     UseCaseStore,
+    VideoGenomeExtractionStore,
 )
 
 
@@ -756,3 +758,33 @@ class InMemoryTranslationStore(TranslationStore):
 
     async def delete(self, translation_id: str) -> bool:
         return self._translations.pop(translation_id, None) is not None
+
+
+class InMemoryVideoGenomeExtractionStore(VideoGenomeExtractionStore):
+    def __init__(self):
+        self._items: dict[str, VideoGenomeExtraction] = {}
+
+    async def create(self, extraction):
+        self._items[extraction.id] = extraction
+        return extraction
+
+    async def get(self, extraction_id):
+        return self._items.get(extraction_id)
+
+    async def list_for_tenant(self, tenant_id):
+        items = [e for e in self._items.values() if e.tenant_id == tenant_id]
+        items.sort(key=lambda e: e.created_at, reverse=True)
+        return items
+
+    async def update(self, extraction_id, **kwargs):
+        item = self._items.get(extraction_id)
+        if item is None:
+            return None
+        from datetime import datetime, timezone
+        kwargs["updated_at"] = datetime.now(timezone.utc)
+        updated = item.model_copy(update=kwargs)
+        self._items[extraction_id] = updated
+        return updated
+
+    async def delete(self, extraction_id):
+        return self._items.pop(extraction_id, None) is not None

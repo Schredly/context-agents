@@ -29,6 +29,8 @@ import GenomeStudioPage from './pages/GenomeStudioPage';
 import TranslationsPage from './pages/TranslationsPage';
 import TranslationEditorPage from './pages/TranslationEditorPage';
 import VideoGenomePage from './pages/VideoGenomePage';
+import VideoGenomeCapturePage from './pages/VideoGenomeCapturePage';
+import VideoGenomeDetailPage from './pages/VideoGenomeDetailPage';
 
 export const router = createBrowserRouter([
   {
@@ -142,6 +144,14 @@ export const router = createBrowserRouter([
       {
         path: 'genomes/video',
         Component: VideoGenomePage,
+      },
+      {
+        path: 'genomes/video/capture',
+        Component: VideoGenomeCapturePage,
+      },
+      {
+        path: 'genomes/video/:id',
+        Component: VideoGenomeDetailPage,
       },
       {
         path: 'genomes/translations',

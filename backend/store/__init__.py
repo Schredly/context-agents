@@ -24,6 +24,7 @@ from store.interface import (
     TranslationStore,
     UseCaseRunStore,
     UseCaseStore,
+    VideoGenomeExtractionStore,
 )
 from store.memory import (
     InMemoryActionStore,
@@ -51,6 +52,7 @@ from store.memory import (
     InMemoryTranslationStore,
     InMemoryUseCaseRunStore,
     InMemoryUseCaseStore,
+    InMemoryVideoGenomeExtractionStore,
 )
 
 __all__ = [
@@ -104,4 +106,6 @@ __all__ = [
     "ManagedIntegrationStore",
     "InMemoryManagedIntegrationStore",
     "InMemoryTranslationStore",
+    "VideoGenomeExtractionStore",
+    "InMemoryVideoGenomeExtractionStore",
 ]

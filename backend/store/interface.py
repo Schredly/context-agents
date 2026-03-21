@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from models import Action, AgentEvent, AgentRun, AgentUIRun, AgentUIRunEvent, ApplicationGenome, ClassificationSchema, ExtractionPayload, FeedbackEvent, GenomeArtifact, GoogleDriveConfig, Integration, LLMConfig, LLMUsageEvent, ManagedIntegration, MetricsEvent, ReplitConfig, RunTelemetry, ServiceNowConfig, Skill, Tenant, TenantLLMAssignment, Translation, UseCase, UseCaseRun
+from models import Action, AgentEvent, AgentRun, AgentUIRun, AgentUIRunEvent, ApplicationGenome, ClassificationSchema, ExtractionPayload, FeedbackEvent, GenomeArtifact, GoogleDriveConfig, Integration, LLMConfig, LLMUsageEvent, ManagedIntegration, MetricsEvent, ReplitConfig, RunTelemetry, ServiceNowConfig, Skill, Tenant, TenantLLMAssignment, Translation, UseCase, UseCaseRun, VideoGenomeExtraction
 
 
 class TenantStore(ABC):
@@ -383,3 +383,16 @@ class TranslationStore(ABC):
 
     @abstractmethod
     async def delete(self, translation_id: str) -> bool: ...
+
+
+class VideoGenomeExtractionStore(ABC):
+    @abstractmethod
+    async def create(self, extraction: "VideoGenomeExtraction") -> "VideoGenomeExtraction": ...
+    @abstractmethod
+    async def get(self, extraction_id: str) -> Optional["VideoGenomeExtraction"]: ...
+    @abstractmethod
+    async def list_for_tenant(self, tenant_id: str) -> list["VideoGenomeExtraction"]: ...
+    @abstractmethod
+    async def update(self, extraction_id: str, **kwargs) -> Optional["VideoGenomeExtraction"]: ...
+    @abstractmethod
+    async def delete(self, extraction_id: str) -> bool: ...

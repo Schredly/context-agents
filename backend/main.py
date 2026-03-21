@@ -39,6 +39,7 @@ from store import (
     InMemoryTenantStore,
     InMemoryUseCaseRunStore,
     InMemoryUseCaseStore,
+    InMemoryVideoGenomeExtractionStore,
 )
 
 @asynccontextmanager
@@ -85,6 +86,7 @@ app.state.genome_artifact_store = InMemoryGenomeArtifactStore()
 app.state.extraction_store = InMemoryExtractionPayloadStore()
 app.state.managed_integration_store = InMemoryManagedIntegrationStore()
 app.state.translation_store = InMemoryTranslationStore()
+app.state.video_genome_store = InMemoryVideoGenomeExtractionStore()
 app.state.runtime_defaults = {}  # tenant_id -> RuntimeDefaults
 
 app.include_router(tenants_router)

@@ -272,11 +272,11 @@ reasoning should include steps like:
 filesystem_plan must contain:
   - branch_name: string (format: "genome-mod-<timestamp>")
   - base_path: string (the genome's directory in the repo)
-  - folders: string[] (folders to create under "Genome Transformations/")
+  - folders: string[] (folders to create under "transformations/")
   - files: array of { path: string, content: string }
 
 IMPORTANT: All new files and folders MUST be created under a top-level
-folder called "Genome Transformations" within the base_path. Never
+folder called "transformations" within the base_path. Never
 overwrite original genome files.
 
 RULES:
@@ -337,7 +337,7 @@ async def genome_transform(body: TransformRequest, request: Request):
         f"Branch name to use: genome-mod-{timestamp}\n\n"
         f"User instruction: {body.prompt}\n\n"
         f"Return ONLY a JSON object with: reasoning, explanation, filesystem_plan, diff, preview.\n"
-        f"All new files must go under 'Genome Transformations/' folder within the base_path.\n"
+        f"All new files must go under 'transformations/' folder within the base_path.\n"
         f"Generate REAL file content based on the actual genome data you can see above."
     )
 
@@ -558,7 +558,7 @@ async def run_translation(body: RunTranslationRequest, request: Request):
         f"Branch name to use: genome-mod-{timestamp}\n\n"
         f"Apply the translation recipe above to the repository content.\n"
         f"Return ONLY a JSON object with: reasoning, explanation, filesystem_plan, diff, preview.\n"
-        f"All new files must go under 'Genome Transformations/' folder within the base_path.\n"
+        f"All new files must go under 'transformations/' folder within the base_path.\n"
         f"Generate REAL, complete file content based on the actual genome data you can see above."
     )
 

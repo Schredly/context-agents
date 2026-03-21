@@ -9,12 +9,13 @@ This service:
   3. Commits genome.yaml, graph.yaml, structure/, config/, data/ to the repo
 
 GitHub structure:
-    genomes/tenants/{tenant}/vendors/{vendor}/{application}/
+    genomes/tenants/{tenant}/vendors/{vendor}/{product_module}/
         genome.yaml              — canonical normalized genome
         graph.yaml               — structured GenomeGraph
         structure/{item}.yaml    — per-item structure files
         config/catalog_config.yaml
         data/raw_vendor_payload.json
+        transformations/         — created only when translations/re-prompts modify content
 """
 
 from __future__ import annotations
