@@ -31,6 +31,12 @@ import TranslationEditorPage from './pages/TranslationEditorPage';
 import VideoGenomePage from './pages/VideoGenomePage';
 import VideoGenomeCapturePage from './pages/VideoGenomeCapturePage';
 import VideoGenomeDetailPage from './pages/VideoGenomeDetailPage';
+import DocGenomePage from './pages/DocGenomePage';
+import DocGenomeCapturePage from './pages/DocGenomeCapturePage';
+import DocGenomeDetailPage from './pages/DocGenomeDetailPage';
+import SNGenomePage from './pages/SNGenomePage';
+import SNGenomeCapturePage from './pages/SNGenomeCapturePage';
+import SNGenomeDetailPage from './pages/SNGenomeDetailPage';
 
 export const router = createBrowserRouter([
   {
@@ -152,6 +158,30 @@ export const router = createBrowserRouter([
       {
         path: 'genomes/video/:id',
         Component: VideoGenomeDetailPage,
+      },
+      {
+        path: 'genomes/doc',
+        Component: DocGenomePage,
+      },
+      {
+        path: 'genomes/doc/capture',
+        Component: DocGenomeCapturePage,
+      },
+      {
+        path: 'genomes/doc/:id',
+        Component: DocGenomeDetailPage,
+      },
+      {
+        path: 'genomes/sn',
+        Component: SNGenomePage,
+      },
+      {
+        path: 'genomes/sn/capture',
+        Component: SNGenomeCapturePage,
+      },
+      {
+        path: 'genomes/sn/:id',
+        Component: SNGenomeDetailPage,
       },
       {
         path: 'genomes/translations',

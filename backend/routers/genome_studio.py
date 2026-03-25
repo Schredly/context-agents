@@ -287,6 +287,33 @@ RULES:
 - Extract prompts into separate files when requested
 - Convert between YAML/JSON formats when requested
 - Return ONLY valid JSON — no markdown, no code fences
+
+---
+
+SPECIAL BEHAVIOR FOR REPLIT TRANSLATIONS:
+
+When the target_platform is "replit", you are generating a complete, runnable application.
+
+If the genome includes workflows, decision logic, or multi-step processes:
+- Create backend/agent.py with a function-based execution pattern
+- Implement structured task execution for approval chains and processes
+- Support optional simple RAG pattern for knowledge-based decisions
+
+APP REQUIREMENTS for Replit targets:
+- FastAPI backend with uvicorn entry
+- Working endpoints with no missing imports
+- Complete, runnable code — no placeholders, no TODOs, no "# implement here"
+- Every file must contain REAL implementation based on the genome data
+
+DO NOT:
+- Output markdown or YAML in the response
+- Omit required files from the filesystem_plan
+- Generate stub/placeholder code
+
+SUCCESS CRITERIA:
+- App runs immediately in Replit with: uvicorn main:app --host 0.0.0.0 --port 8080
+- All API endpoints are functional
+- Workflows from the genome are executable via API calls
 """
 
 
@@ -517,25 +544,28 @@ async def run_translation(body: RunTranslationRequest, request: Request):
     base_path = "/".join(body.path.split("/")[:-1]) if "/" in body.path else "genomes"
     timestamp = str(int(time.time()))
 
-    # ── Read full repo context (same as /transform) ──
-    tree = await list_tree(TENANT, "genomes", request.app, depth=8)
+    # ── Read SCOPED repo context (only the selected branch/folder) ──
+    # Scope to the base_path so we only send relevant files to the LLM
+    tree = await list_tree(TENANT, base_path, request.app, depth=8)
     tree_str = _format_tree(tree)
-    yaml_paths = _collect_file_paths(tree, extensions=(".yaml", ".yml"))
+    yaml_paths = _collect_file_paths(tree, extensions=(".yaml", ".yml", ".json"))
     yaml_contents: list[str] = []
     total_chars = 0
-    for path in yaml_paths[:5]:
-        if total_chars > 15_000:
+    for path in yaml_paths[:15]:
+        if total_chars > 40_000:
             break
         file_data = await get_file(TENANT, path, request.app)
         if file_data and file_data.get("content"):
-            content = file_data["content"][:5000]
+            content = file_data["content"][:8000]
             yaml_contents.append(f"--- FILE: {path} ---\n{content}")
             total_chars += len(content)
 
-    # ── Build the prompt with full repo context + translation instructions ──
-    user_message = f"Repository file tree:\n{tree_str}\n\n"
+    # ── Build the prompt scoped to the selected branch/folder ──
+    user_message = f"TARGET APPLICATION: {base_path}\n"
+    user_message += f"SCOPE: Only transform files under this path. Ignore other branches.\n\n"
+    user_message += f"File tree for {base_path}:\n{tree_str}\n\n"
     if yaml_contents:
-        user_message += "Key YAML file contents:\n\n" + "\n\n".join(yaml_contents) + "\n\n"
+        user_message += "Application genome files:\n\n" + "\n\n".join(yaml_contents) + "\n\n"
     if body.content:
         user_message += f"Currently selected file content:\n{body.content}\n\n"
 

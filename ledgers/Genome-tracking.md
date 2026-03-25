@@ -676,3 +676,88 @@ class GenomeArtifact(BaseModel):
 | `src/app/pages/genome-studio/ChatInterface.tsx` | Accepts video file types, uploads videos to `/api/video-genome/upload` |
 | `src/app/store/useGenomeStore.ts` | Added `extractVideoGenome` callback |
 | `src/app/pages/GenomeStudioPage.tsx` | Video attachment detection, triggers `extractVideoGenome` when user says "extract genome" |
+
+---
+
+## Sprint #9 — 2026-03-24 — Doc Genome: Extract Application Genomes from Documentation
+
+**What happened:**
+- New "Doc Genome" module: upload product documentation (PDF, DOCX, TXT, MD), AI extracts an application genome (objects, fields, workflows, relationships), user reviews/refines, then commits to GitHub.
+- 3-agent pipeline: Document Parser → Structure Extraction (LLM) → Synthesis & Validation.
+- Uses the tenant's default LLM configuration (same `_get_llm_config` + `call_llm` pattern as Video Genome).
+- SSE streaming for real-time agent progress during extraction.
+- Full refinement loop: user can provide additional context and re-extract with refined instructions.
+- Indigo color scheme to differentiate from Video Genome's orange.
+
+**Files created:**
+| File | Purpose |
+|------|---------|
+| `backend/models.py` (DocGenomeExtraction) | Pydantic model: doc_id, doc_filename, doc_size_mb, doc_type, vendor, product_area, module, genome, doc_sections, page_count, word_count, status, committed, commit_result |
+| `backend/routers/doc_genome.py` | API router: POST /upload, POST /extract (SSE), GET /extractions, GET /extractions/{id}, DELETE /extractions/{id}, POST /commit |
+| `backend/services/doc_agents/__init__.py` | Package init |
+| `backend/services/doc_agents/orchestrator.py` | 3-stage pipeline orchestrator: parse → extract structure → synthesize |
+| `backend/services/doc_agents/document_parser.py` | Parses PDF (pdfplumber/PyPDF2), DOCX (python-docx), TXT/MD into sections |
+| `backend/services/doc_agents/structure_extraction.py` | LLM agent that extracts genome JSON (objects, fields, workflows, relationships) from document text |
+| `backend/services/doc_agents/synthesis_validation.py` | Validates genome, checks referential integrity, computes confidence score |
+| `backend/store/interface.py` (DocGenomeExtractionStore) | Abstract store interface with CRUD methods |
+| `backend/store/memory.py` (InMemoryDocGenomeExtractionStore) | In-memory dict-based implementation |
+| `src/app/pages/DocGenomePage.tsx` | List page at `/genomes/doc` — shows all doc extractions with status badges, doc type labels, genome stats |
+| `src/app/pages/DocGenomeCapturePage.tsx` | 4-step wizard: Select Document → Extract Genome → Refine → Commit to GitHub. SSE agent progress, editable genome files |
+| `src/app/pages/DocGenomeDetailPage.tsx` | Detail view with summary cards (pages, objects, fields, words, latency), file browser, sections tab, GitHub commit |
+
+**Files modified:**
+| File | Change |
+|------|--------|
+| `backend/main.py` | Registered `doc_genome_router`, added `InMemoryDocGenomeExtractionStore` to app.state |
+| `backend/store/__init__.py` | Added DocGenomeExtractionStore and InMemoryDocGenomeExtractionStore exports |
+| `src/app/routes.tsx` | Added `/genomes/doc`, `/genomes/doc/capture`, `/genomes/doc/:id` routes |
+| `src/app/components/Layout.tsx` | Added "Doc Genome" to App Genomes sidebar nav |
+
+---
+
+## Sprint #10 — 2026-03-24 — SN Genome: Extract Genomes from ServiceNow Update Set XMLs
+
+**What happened:**
+- New "SN Genome" module under App Genomes for extracting structured application genomes from ServiceNow update set XML files.
+- Supports multi-file upload (one or more .xml files per extraction).
+- Uses a specialized ServiceNow architect prompt that extracts: application metadata, entities, catalog items/variables, workflows, business rules, UI modules, navigation, data model tables, and integrations.
+- Output is canonical YAML genome format that's platform-neutral and rebuild-ready.
+- 2-agent pipeline: XML Parser → Genome Extraction (LLM).
+- Emerald color scheme to differentiate from Doc Genome (indigo) and Video Genome (orange).
+
+**Files created:**
+| File | Purpose |
+|------|---------|
+| `backend/models.py` (SNGenomeExtraction) | Model: doc_ids (list), doc_filenames, total_size_mb, genome, genome_yaml, file_count, status, committed |
+| `backend/routers/sn_genome.py` | API router: POST /upload (multi-file), POST /extract (SSE), GET/DELETE extractions, POST /commit |
+| `backend/services/sn_agents/__init__.py` | Package init |
+| `backend/services/sn_agents/orchestrator.py` | 2-stage pipeline: parse XML → extract genome |
+| `backend/services/sn_agents/xml_parser.py` | Parses ServiceNow update set XML, counts records per update set |
+| `backend/services/sn_agents/genome_extraction.py` | LLM agent with SN-specific prompt — extracts entities, catalog, workflows, rules, tables, integrations as YAML |
+| `src/app/pages/SNGenomePage.tsx` | List page at `/genomes/sn` — shows extractions with SN-specific genome element counts |
+| `src/app/pages/SNGenomeCapturePage.tsx` | 4-step wizard with multi-file upload, agent progress, editable genome files, GitHub commit |
+| `src/app/pages/SNGenomeDetailPage.tsx` | Detail view with 6 summary cards (entities, catalog, workflows, rules, tables, latency), file browser, GitHub commit |
+
+**Files modified:**
+| File | Change |
+|------|--------|
+| `backend/main.py` | Registered `sn_genome_router`, added `InMemorySNGenomeExtractionStore` |
+| `backend/store/interface.py` | Added SNGenomeExtractionStore |
+| `backend/store/memory.py` | Added InMemorySNGenomeExtractionStore |
+| `backend/store/__init__.py` | Added exports |
+| `src/app/routes.tsx` | Added `/genomes/sn`, `/genomes/sn/capture`, `/genomes/sn/:id` routes |
+| `src/app/components/Layout.tsx` | Added "SN Genome" to sidebar nav |
+
+**GitHub commit structure:**
+```
+genomes/tenants/{tenant}/vendors/servicenow/{product_area}/{module}/
+    genome.yaml              — full YAML genome output
+    structure/entities.json
+    structure/catalog.json
+    structure/workflows.json
+    structure/business_logic.json
+    structure/data_model.json
+    structure/ui.json
+    structure/navigation.json
+    structure/integrations.json
+```

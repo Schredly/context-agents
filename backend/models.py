@@ -242,7 +242,7 @@ class AgentEvent(BaseModel):
     ]
     summary: str
     confidence: Optional[float] = None
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=datetime.now)
     metadata: Optional[dict[str, Any]] = None
 
 
@@ -259,7 +259,7 @@ class FeedbackEvent(BaseModel):
     notes: str = ""
     classification_path: str = ""
     confidence_at_time: Optional[float] = None
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 
 class CreateFeedbackRequest(BaseModel):
@@ -713,7 +713,7 @@ class AgentUIRunEvent(BaseModel):
     run_id: str
     event_type: str                  # reasoning | use_case_selected | skill_started | llm_usage | etc.
     payload: dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=datetime.now)
     # LLM usage fields (populated when event_type == "llm_usage")
     model: str | None = None
     prompt_tokens: int | None = None
@@ -864,7 +864,7 @@ class LLMUsageEvent(BaseModel):
     total_tokens: int = 0
     cost: float = 0.0
     latency_ms: int = 0
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 
 from genome_graph import GenomeGraph
@@ -988,6 +988,59 @@ class VideoGenomeExtraction(BaseModel):
     frame_count: int = 0
     unique_screens: int = 0
     has_audio: bool = False
+    total_tokens: int = 0
+    total_cost: float = 0.0
+    latency_ms: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    committed: bool = False
+    commit_result: Optional[dict] = None
+
+
+class SNGenomeExtraction(BaseModel):
+    id: str
+    tenant_id: str = "acme"
+    extraction_id: str = ""           # grouping id for multi-file uploads
+    doc_filenames: list[str] = Field(default_factory=list)   # all uploaded XML filenames
+    doc_ids: list[str] = Field(default_factory=list)         # all uploaded doc_ids
+    total_size_mb: float = 0.0
+    application_name: str = ""
+    vendor: str = "ServiceNow"
+    product_area: str = ""
+    module: str = ""
+    status: str = "pending"          # pending | processing | completed | error
+    agent_progress: dict = Field(default_factory=dict)
+    genome: Optional[dict] = None
+    genome_yaml: Optional[str] = None   # raw YAML output from LLM
+    error: Optional[str] = None
+    file_count: int = 0
+    total_tokens: int = 0
+    total_cost: float = 0.0
+    latency_ms: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    committed: bool = False
+    commit_result: Optional[dict] = None
+
+
+class DocGenomeExtraction(BaseModel):
+    id: str
+    tenant_id: str = "acme"
+    doc_id: str
+    doc_filename: str = ""
+    doc_size_mb: float = 0.0
+    doc_type: str = ""               # pdf, docx, txt, md
+    application_name: str = ""
+    vendor: str = ""
+    product_area: str = ""
+    module: str = ""
+    status: str = "pending"          # pending | processing | completed | error
+    agent_progress: dict = Field(default_factory=dict)
+    genome: Optional[dict] = None
+    doc_sections: Optional[list] = None   # parsed document sections
+    error: Optional[str] = None
+    page_count: int = 0
+    word_count: int = 0
     total_tokens: int = 0
     total_cost: float = 0.0
     latency_ms: int = 0

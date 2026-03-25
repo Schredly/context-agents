@@ -3105,3 +3105,47 @@ Enabled GitHub to have multiple integration instances per tenant (e.g. "Producti
 - When adding a multi-instance type, a modal prompts for a custom name
 - Integration list card displays custom `name` if set, with catalog type name as subtitle
 - GitHub integrations no longer filtered out of the "Add" dropdown once one exists
+
+---
+
+## #068 — 2026-03-24 — Doc Genome: Extract Application Genomes from Documentation
+
+**What happened:**
+Added "Doc Genome" as a new capability under App Genomes, alongside Video Genome. Users upload product documentation (PDF, DOCX, TXT, MD), a 3-agent AI pipeline extracts the application genome, and the user can review, refine, and commit to GitHub.
+
+**Backend:**
+- `DocGenomeExtraction` model in `models.py`
+- `DocGenomeExtractionStore` interface + `InMemoryDocGenomeExtractionStore` in store layer
+- `backend/routers/doc_genome.py`: 6 endpoints (upload, extract via SSE, list, get, delete, commit)
+- `backend/services/doc_agents/`: 3-agent pipeline — document_parser (PDF/DOCX/TXT/MD), structure_extraction (LLM), synthesis_validation
+
+**Frontend:**
+- `DocGenomePage.tsx`: List view at `/genomes/doc`
+- `DocGenomeCapturePage.tsx`: 4-step wizard (Select → Extract → Refine → Commit)
+- `DocGenomeDetailPage.tsx`: Detail view with file browser, sections tab, GitHub commit
+- Routes and sidebar nav entry added
+
+**Key design decisions:**
+- Uses tenant's default LLM via `_get_llm_config` + `call_llm` (same as Video Genome)
+- Indigo color scheme differentiates from Video Genome's orange
+- Document parser supports PDF (pdfplumber/PyPDF2), DOCX (python-docx), and plain text/markdown
+- Reuses `oy_genome_github_service.commit_genome()` for GitHub integration
+
+---
+
+## #069 — 2026-03-24 — SN Genome: Extract Genomes from ServiceNow Update Set XMLs
+
+**What happened:**
+Added "SN Genome" module for extracting structured application genomes from ServiceNow update set XML files. Supports multi-file upload, uses a specialized ServiceNow architect LLM prompt to extract entities, catalog items, workflows, business rules, UI modules, data model tables, and integrations into a canonical YAML genome format.
+
+**Backend:**
+- `SNGenomeExtraction` model with multi-file support (doc_ids list, doc_filenames list)
+- `SNGenomeExtractionStore` + in-memory implementation
+- `backend/routers/sn_genome.py`: multi-file upload, SSE extract, CRUD, GitHub commit
+- `backend/services/sn_agents/`: 2-agent pipeline (xml_parser, genome_extraction with SN-specific prompt)
+
+**Frontend:**
+- `SNGenomePage.tsx`: List view with SN-specific genome element counts
+- `SNGenomeCapturePage.tsx`: 4-step wizard with multi-file XML upload
+- `SNGenomeDetailPage.tsx`: Detail with 6 summary cards and file browser
+- Emerald color scheme, routes at `/genomes/sn/*`, sidebar nav entry

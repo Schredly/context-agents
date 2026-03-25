@@ -13,6 +13,8 @@ from workers.genome_worker import start_genome_worker
 from routers import actions_router, admin_router, agent_router, extractions_router, genomes_router, integrations_router, llm_configs_router, llm_usage_router, managed_integrations_router, runs_router, skills_router, tenants_router, tools_router, translations_router, uc_runs_router, use_cases_router
 from routers.genome_studio import router as genome_studio_router
 from routers.video_genome import router as video_genome_router
+from routers.doc_genome import router as doc_genome_router
+from routers.sn_genome import router as sn_genome_router
 from store import (
     InMemoryActionStore,
     InMemoryAgentUIRunEventStore,
@@ -40,6 +42,8 @@ from store import (
     InMemoryUseCaseRunStore,
     InMemoryUseCaseStore,
     InMemoryVideoGenomeExtractionStore,
+    InMemoryDocGenomeExtractionStore,
+    InMemorySNGenomeExtractionStore,
 )
 
 @asynccontextmanager
@@ -87,6 +91,8 @@ app.state.extraction_store = InMemoryExtractionPayloadStore()
 app.state.managed_integration_store = InMemoryManagedIntegrationStore()
 app.state.translation_store = InMemoryTranslationStore()
 app.state.video_genome_store = InMemoryVideoGenomeExtractionStore()
+app.state.doc_genome_store = InMemoryDocGenomeExtractionStore()
+app.state.sn_genome_store = InMemorySNGenomeExtractionStore()
 app.state.runtime_defaults = {}  # tenant_id -> RuntimeDefaults
 
 app.include_router(tenants_router)
@@ -107,6 +113,8 @@ app.include_router(managed_integrations_router)
 app.include_router(translations_router)
 app.include_router(genome_studio_router)
 app.include_router(video_genome_router)
+app.include_router(doc_genome_router)
+app.include_router(sn_genome_router)
 
 _pdf_dir = os.path.join(os.path.dirname(__file__), "generated_pdfs")
 os.makedirs(_pdf_dir, exist_ok=True)

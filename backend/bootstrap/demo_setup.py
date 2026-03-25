@@ -527,24 +527,146 @@ async def seed_demo_data(app) -> None:
     translation_defs = [
         {
             "id": "trans_snow_replit",
-            "name": "ServiceNow Catalog \u2192 Replit App",
-            "description": "Transforms a ServiceNow service catalog genome into a Replit-deployable application with master prompt, catalog summary, and Replit config.",
+            "name": "ServiceNow Application -> Replit AI App",
+            "description": "Converts any ServiceNow application or catalog genome into a runnable Replit application with FastAPI backend, optional UI, and AI-agent capable workflow execution. Transforms genome entities into domain models, business rules into automation functions, workflows into orchestrated endpoints, and catalog items into forms. Supports function-based AI agent patterns for complex approval chains and multi-step processes.",
             "source_vendor": "ServiceNow",
-            "source_type": "service_catalog",
+            "source_type": "application",
             "target_platform": "replit",
             "instructions": (
-                "You are translating a ServiceNow service catalog genome into a Replit application.\n\n"
-                "Given the genome YAML content, produce:\n"
-                "1. A master_prompt.md \u2014 comprehensive prompt for Replit Agent to build the app\n"
-                "2. A catalog_summary.json \u2014 structured JSON summary of the catalog item\n"
-                "3. A .replit config \u2014 Replit project configuration\n\n"
-                "The master prompt should describe the UI, API routes, data models, and workflows "
-                "that replicate the ServiceNow catalog item as a standalone web application.\n"
-                "Include all fields, validation rules, and approval workflows from the genome."
+                "You are an expert OverYonder Translation Architect converting a ServiceNow-derived "
+                "Application Genome into a Replit-native AI application.\n\n"
+                "This is a PATTERN-BASED recipe that must work on ANY ServiceNow genome.\n\n"
+                "---\n\n"
+                "## 1. PARSE GENOME\n\n"
+                "Extract from the genome YAML:\n"
+                "- entities -> domain models (Python dataclasses or Pydantic)\n"
+                "- workflows -> backend process endpoints\n"
+                "- business_logic rules -> automation functions in services/\n"
+                "- catalog items/variables -> input forms / API request schemas\n"
+                "- ui/modules -> app routes or pages\n"
+                "- data_model tables -> SQLite tables or in-memory stores\n"
+                "- relationships -> foreign keys and model references\n\n"
+                "---\n\n"
+                "## 2. GENERATE REPLIT APP (MANDATORY STRUCTURE)\n\n"
+                "Use Python + FastAPI. Generate these files:\n\n"
+                "### Backend (REQUIRED):\n"
+                "- main.py -- FastAPI entrypoint with CORS, lifespan, router includes\n"
+                "- routes.py -- All API endpoints organized by entity\n"
+                "- models.py -- Pydantic models for every entity from the genome\n"
+                "- services/ directory -- Business logic layer, one file per domain\n"
+                "- store.py -- Data access layer (in-memory dict or SQLite)\n"
+                "- requirements.txt -- fastapi, uvicorn, pydantic, etc.\n\n"
+                "### AI Agent Layer (REQUIRED when genome has workflows or business_logic):\n"
+                "- backend/agent.py -- MUST contain:\n\n"
+                "  1. FUNCTION REGISTRY: Wrap every business_logic rule as a callable function.\n"
+                "     Example:\n"
+                "       FUNCTIONS = {\n"
+                "           'decrement_inventory': decrement_inventory,\n"
+                "           'approve_request': approve_request,\n"
+                "           'send_notification': send_notification,\n"
+                "       }\n\n"
+                "  2. TASK ROUTER: Create a dispatcher that routes tasks to functions:\n"
+                "       async def route_task(task_name: str, payload: dict) -> dict:\n"
+                "           fn = FUNCTIONS.get(task_name)\n"
+                "           if not fn: return {'error': f'Unknown task: {task_name}'}\n"
+                "           return await fn(**payload)\n\n"
+                "  3. SIMPLE MEMORY: In-memory conversation/task history:\n"
+                "       TASK_HISTORY: list[dict] = []\n"
+                "       def log_task(task_name, payload, result): ...\n"
+                "       def get_history(limit=10): ...\n\n"
+                "  4. WORKFLOW EXECUTOR: Chain multiple functions for multi-step workflows:\n"
+                "       async def execute_workflow(workflow_name: str, context: dict) -> dict:\n"
+                "           steps = WORKFLOWS[workflow_name]\n"
+                "           for step in steps:\n"
+                "               result = await route_task(step['action'], context)\n"
+                "               context.update(result)\n"
+                "           return context\n\n"
+                "  5. OPTIONAL RETRIEVAL: If the genome has data_model or catalog items,\n"
+                "     implement a simple retrieval function:\n"
+                "       def retrieve(query: str, collection: str) -> list[dict]:\n"
+                "           # Search in-memory store by keyword matching\n\n"
+                "  6. API ENDPOINT: Expose the agent via:\n"
+                "       POST /api/agent/execute  -- body: {task, payload}\n"
+                "       POST /api/agent/workflow  -- body: {workflow, context}\n"
+                "       GET  /api/agent/history   -- returns task execution history\n\n"
+                "### Replit Config (REQUIRED):\n"
+                "- .replit -- run = 'uvicorn main:app --host 0.0.0.0 --port 8080'\n"
+                "- replit.nix -- Python 3.11 environment\n\n"
+                "---\n\n"
+                "## 3. DATA LAYER\n\n"
+                "- Use simple in-memory dict store OR SQLite (prefer in-memory for simplicity)\n"
+                "- Map every entity from data_model.tables -> a model + CRUD store\n"
+                "- Include: create, get_by_id, list_all, update, delete for each entity\n"
+                "- Preserve relationships as references between stores\n\n"
+                "---\n\n"
+                "## 4. API DESIGN\n\n"
+                "For each entity in the genome, create:\n"
+                "- GET /api/{entity} -- list all\n"
+                "- GET /api/{entity}/{id} -- get by ID\n"
+                "- POST /api/{entity} -- create\n"
+                "- PUT /api/{entity}/{id} -- update\n"
+                "- DELETE /api/{entity}/{id} -- delete\n\n"
+                "For each workflow, create explicit action endpoints:\n"
+                "- POST /api/checkout -- for checkout workflows\n"
+                "- POST /api/approve/{id} -- for approval workflows\n"
+                "- POST /api/submit-request -- for request intake\n"
+                "- POST /api/process/{id} -- for processing steps\n\n"
+                "---\n\n"
+                "## 5. BUSINESS LOGIC TRANSFORMATION\n\n"
+                "Convert every business_logic rule into a Python function in services/:\n\n"
+                "Example genome rule:\n"
+                "  name: decrement_inventory_on_checkout\n"
+                "  trigger: checkout_created\n"
+                "  action: reduce inventory count\n\n"
+                "Becomes:\n"
+                "  async def decrement_inventory(item_id: str, quantity: int):\n"
+                "      item = store.get(item_id)\n"
+                "      item.quantity -= quantity\n"
+                "      store.update(item)\n\n"
+                "Convert ALL logic into working Python functions.\n"
+                "Remove ServiceNow-specific terminology -- use platform-neutral names.\n\n"
+                "---\n\n"
+                "## 6. OPTIONAL FRONTEND\n\n"
+                "If catalog items exist in the genome, generate:\n"
+                "- templates/ directory with HTML forms\n"
+                "- Static HTML + CSS that calls the FastAPI endpoints\n"
+                "- One page per catalog item with all variables as form fields\n"
+                "- Dashboard page listing all entities with counts\n\n"
+                "If no catalog items, skip frontend and make it API-only.\n\n"
+                "---\n\n"
+                "## 7. OUTPUT FORMAT\n\n"
+                "Return a filesystem_plan JSON with:\n"
+                "- branch_name: 'replit-app/{app_slug}'\n"
+                "- base_path: 'Genome Transformations/replit-app'\n"
+                "- files: [{path, content}] for every generated file\n"
+                "- folders: list of directory paths\n\n"
+                "Every file must contain COMPLETE, WORKING code -- no placeholders, no TODOs.\n"
+                "The app must run immediately with: uvicorn main:app --host 0.0.0.0 --port 8080\n"
             ),
             "output_structure": {
-                "folders": ["Genome Transformations/replit-app"],
-                "files": ["master_prompt.md", "catalog_summary.json", ".replit"],
+                "folders": [
+                    "backend",
+                    "backend/services",
+                    "frontend",
+                    "data",
+                ],
+                "files": [
+                    "backend/main.py",
+                    "backend/routes.py",
+                    "backend/models.py",
+                    "backend/store.py",
+                    "backend/services/__init__.py",
+                    "backend/services/logic.py",
+                    "backend/services/workflows.py",
+                    "backend/agent.py",
+                    "frontend/index.html",
+                    "frontend/style.css",
+                    "data/seed.json",
+                    "requirements.txt",
+                    ".replit",
+                    "replit.nix",
+                    "README.md",
+                ],
             },
             "status": "active",
         },
