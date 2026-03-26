@@ -99,7 +99,8 @@ You have a maximum of 5 retrieval rounds before you MUST produce output.
 ## RULES
 
 - NEVER request the full genome unless no index or structure files exist
-- Each plan[] entry must be a concrete, specific step (not vague)
+- Each plan[] entry MUST be ≤12 words — short labels, not prose explanations
+- Keep plan[] to 3–5 items maximum — brevity saves tokens for actual output
 - All new files MUST go under a 'transformations/' subfolder
 - Never overwrite original genome files (genome.yaml, graph.yaml, structure/*)
 - Return ONLY valid JSON — no markdown fences, no prose outside the JSON object
@@ -156,6 +157,38 @@ def _parse_llm_response(raw: str) -> dict | None:
                     except json.JSONDecodeError:
                         break
     return None
+
+
+def _is_truncated_json(raw: str, stop_reason: str | None = None) -> bool:
+    """Return True if the response was cut off before the JSON closed.
+
+    Uses stop_reason='max_tokens' from the API as the authoritative signal when available.
+    Falls back to structural heuristics (strip fences, attempt parse).
+    """
+    # Authoritative signal from the API
+    if stop_reason == "max_tokens":
+        return True
+
+    import re as _re
+    text = raw.strip()
+    # Strip markdown fences before checking structure
+    fence = _re.search(r"```(?:json)?\s*\n?([\s\S]*?)```", text)
+    if fence:
+        # Response has a closing fence — not truncated at the JSON level
+        return False
+    # Strip opening fence if present without a closing one (truncated inside a fence)
+    text = _re.sub(r"^```(?:json)?\s*\n?", "", text).strip()
+
+    if not text.startswith("{"):
+        return False
+    try:
+        json.loads(text)
+        return False
+    except json.JSONDecodeError:
+        return True
+
+
+MAX_CONTINUATION_ATTEMPTS = 2  # retries to complete a truncated JSON response
 
 
 async def hydration_loop(
@@ -282,6 +315,48 @@ async def hydration_loop(
         latency_ms = int((time.monotonic() - t0) * 1000)
         total_input_tokens += meta.get("input_tokens") or 0
         total_output_tokens += meta.get("output_tokens") or 0
+        stop_reason = meta.get("stop_reason")
+
+        # --- Truncation recovery: if JSON is cut off, ask the LLM to continue ---
+        if _is_truncated_json(raw_response, stop_reason=stop_reason):
+            continuation_tokens = max(max_tokens, 32768)
+            accumulated = raw_response
+            for attempt in range(1, MAX_CONTINUATION_ATTEMPTS + 1):
+                yield {"type": "phase", "data": {
+                    "phase": "recovering",
+                    "message": f"Round {round_num}: response truncated — requesting continuation ({attempt}/{MAX_CONTINUATION_ATTEMPTS})",
+                }}
+                logger.warning("[hydration] Round %d: truncated JSON, continuation attempt %d", round_num, attempt)
+                continuation_messages = messages + [
+                    {"role": "assistant", "content": accumulated},
+                    {"role": "user", "content": "Your JSON response was truncated. Continue from exactly where you left off — output ONLY the remaining JSON (no preamble, no restart)."},
+                ]
+                try:
+                    cont_text, cont_meta = await call_llm_multi_turn(
+                        provider=llm_cfg["provider"],
+                        api_key=llm_cfg["api_key"],
+                        model=llm_cfg["model"],
+                        messages=continuation_messages,
+                        system_prompt=system,
+                        max_tokens=continuation_tokens,
+                    )
+                    total_input_tokens += cont_meta.get("input_tokens") or 0
+                    total_output_tokens += cont_meta.get("output_tokens") or 0
+                    accumulated = accumulated + cont_text
+                    if not _is_truncated_json(accumulated, stop_reason=cont_meta.get("stop_reason")):
+                        raw_response = accumulated
+                        break
+                except Exception as exc:
+                    logger.warning("[hydration] Continuation attempt %d failed: %s", attempt, exc)
+                    break
+            else:
+                # All continuation attempts exhausted — still truncated
+                logger.error("[hydration] Round %d: JSON still truncated after %d attempts", round_num, MAX_CONTINUATION_ATTEMPTS)
+                yield {"type": "error", "data": {
+                    "message": "LLM response truncated and could not be recovered. Try a shorter translation task or split into multiple steps.",
+                    "raw_response": raw_response[:500],
+                }}
+                return
 
         # Parse LLM response
         parsed = _parse_llm_response(raw_response)

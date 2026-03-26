@@ -671,13 +671,16 @@ async def seed_demo_data(app) -> None:
                 "---\n\n"
                 "## OUTPUT FORMAT\n"
                 "Return ONLY valid JSON matching this exact shape (no markdown fences):\n"
-                '{"plan":["short step labels"],"output":{"explanation":"...","filesystem_plan":{'
+                '{"plan":["≤5 short step labels"],"output":{"explanation":"1 sentence summary ONLY — keep this extremely short to save tokens for the files","filesystem_plan":{'
                 '"branch_name":"claude-build/{app_slug}",'
                 '"base_path":"<genome base path>",'
                 '"folders":["transformations"],'
                 '"files":[{"path":"transformations/CLAUDE.md","content":"<full CLAUDE.md>"},'
                 '{"path":"transformations/seed.json","content":"<seed JSON string>"}]'
-                '},"diff":"Files created: CLAUDE.md, seed.json","preview":"<first 300 chars of CLAUDE.md>"}}\n'
+                '},"diff":"Files created: CLAUDE.md, seed.json","preview":"<first 200 chars of CLAUDE.md>"}}\n'
+                "\nCRITICAL: explanation MUST be ≤2 sentences. Do NOT write prose in explanation — "
+                "all detail goes inside transformations/CLAUDE.md. Wasting tokens on explanation "
+                "causes the response to be truncated before the files are complete.\n"
             ),
             "output_structure": {
                 "folders": ["transformations"],

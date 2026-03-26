@@ -258,7 +258,13 @@ async def _call_openai(api_key: str, model: str, user_message: str, *, system_pr
     # Reasoning models (o-series) use "developer" role instead of "system"
     # and need higher token limits for chain-of-thought overhead
     sys_role = "developer" if _is_reasoning_model(model) else "system"
-    token_limit = max_tokens
+    # Cap token limit per model — some OpenAI models only support 16K output
+    _OPENAI_MAX_OUTPUT: dict[str, int] = {
+        "gpt-4o": 16384,
+        "gpt-4o-mini": 16384,
+    }
+    model_cap = _OPENAI_MAX_OUTPUT.get(model, max_tokens)
+    token_limit = min(max_tokens, model_cap)
 
     # Map content_blocks for OpenAI
     if content_blocks:
@@ -345,6 +351,103 @@ async def call_llm(provider: str, api_key: str, model: str,
     if provider == "openai":
         return await _call_openai(api_key, model, user_message, system_prompt=system_prompt, max_tokens=max_tokens, content_blocks=content_blocks)
     return await _call_anthropic(api_key, model, user_message, system_prompt=system_prompt, content_blocks=content_blocks)
+
+
+async def call_llm_multi_turn(
+    provider: str,
+    api_key: str,
+    model: str,
+    messages: list[dict],
+    system_prompt: str,
+    max_tokens: int = 16384,
+) -> tuple[str, dict]:
+    """Multi-turn LLM call — sends a full conversation history.
+
+    messages: [{"role": "user"|"assistant", "content": "..."}]
+    """
+    api_key = _clean_key(api_key)
+
+    if provider == "openai":
+        sys_role = "developer" if _is_reasoning_model(model) else "system"
+        _OPENAI_MAX_OUTPUT: dict[str, int] = {"gpt-4o": 16384, "gpt-4o-mini": 16384}
+        token_limit = min(max_tokens, _OPENAI_MAX_OUTPUT.get(model, max_tokens))
+
+        payload = {
+            "model": model,
+            "max_completion_tokens": token_limit,
+            "messages": [{"role": sys_role, "content": system_prompt}] + messages,
+        }
+
+        import asyncio as _asyncio
+        start = time.monotonic()
+        res = None
+        for attempt in range(3):
+            async with httpx.AsyncClient(timeout=CLAUDE_TIMEOUT) as client:
+                res = await client.post(
+                    OPENAI_API_URL,
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json=payload,
+                )
+            if res.status_code == 429:
+                await _asyncio.sleep(min(2 ** attempt * 3, 10))
+                continue
+            break
+        latency_ms = int((time.monotonic() - start) * 1000)
+
+        if res is None or not res.is_success:
+            detail = ""
+            try:
+                detail = res.json().get("error", {}).get("message", "") if res else "No response"
+            except Exception:
+                pass
+            raise ClaudeClientError(f"OpenAI API returned {res.status_code if res else 'timeout'}: {detail}")
+
+        body = res.json()
+        choice = body.get("choices", [{}])[0]
+        text = choice.get("message", {}).get("content", "")
+        usage = body.get("usage", {})
+        # Normalize OpenAI finish_reason to Anthropic stop_reason vocabulary
+        finish = choice.get("finish_reason", "")
+        meta = {
+            "model": body.get("model", model), "latency_ms": latency_ms,
+            "input_tokens": usage.get("prompt_tokens"), "output_tokens": usage.get("completion_tokens"),
+            "stop_reason": "max_tokens" if finish == "length" else finish,
+        }
+        return text, meta
+
+    else:  # anthropic
+        payload = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system_prompt,
+            "messages": messages,
+        }
+        start = time.monotonic()
+        async with httpx.AsyncClient(timeout=CLAUDE_TIMEOUT) as client:
+            res = await client.post(
+                CLAUDE_API_URL,
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                json=payload,
+            )
+        latency_ms = int((time.monotonic() - start) * 1000)
+
+        if not res.is_success:
+            detail = ""
+            try:
+                detail = res.json().get("error", {}).get("message", "")
+            except Exception:
+                pass
+            raise ClaudeClientError(f"Anthropic API returned {res.status_code}: {detail or res.text[:200]}")
+
+        body = res.json()
+        text = "".join(b["text"] for b in body.get("content", []) if b.get("type") == "text")
+        meta = {
+            "model": body.get("model", model), "latency_ms": latency_ms,
+            "input_tokens": body.get("usage", {}).get("input_tokens"),
+            "output_tokens": body.get("usage", {}).get("output_tokens"),
+            "stop_reason": body.get("stop_reason"),
+        }
+        return text, meta
 
 
 async def synthesize_resolution(
