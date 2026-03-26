@@ -28,17 +28,27 @@ entities:
   - name:
     type:
     table:
-    fields: []
-    relationships: []
+    fields:
+      - name:
+        type:        # string | integer | decimal | boolean | reference | datetime | date | choice
+        required:    # true/false
+        choices: [] # only for choice fields — list the actual option values found in XML
+    relationships:
+      - target_table:
+        type:        # has_many | belongs_to | many_to_many
+        via_field:
 
 catalog:
   items:
     - name:
+      description:
       variables:
         - name:
-          type:
+          label:     # human-readable label from the XML
+          type:      # see CATALOG VARIABLE TYPES below — use the label, not the number
           required:
           order:
+          choices: [] # for choice/select fields — list the actual options
 
 workflows:
   - name:
@@ -70,7 +80,10 @@ data_model:
   tables:
     - name:
       purpose:
-      key_fields: []
+      key_fields:
+        - name:
+          type:
+          notes:
 
 integrations:
   - name:
@@ -85,14 +98,67 @@ integrations:
 1. Parse ALL sys_update_xml payloads
 2. Identify:
    - sys_app → application
+   - sys_db_object → tables (extract ALL fields from sys_dictionary records for that table)
    - sys_app_module → UI/navigation
-   - sys_script → business rules
-   - item_option_new → catalog variables
-   - question_choice → choice sets
+   - sys_script / sys_business_rule → business rules
+   - item_option_new → catalog variables (apply CATALOG VARIABLE TYPE FILTER below)
+   - question_choice → choice sets (attach to the parent variable)
+   - sys_choice → global choice lists
 3. Infer relationships between components
 4. Summarize logic (do NOT copy raw scripts unless necessary)
 5. Normalize names into readable business meaning
 6. Group related components into logical workflows
+
+---
+
+### CRITICAL: COMPLETE DATA MODEL
+
+Every table referenced anywhere in the genome MUST appear in data_model.tables.
+
+Specifically:
+- If a business rule's `table` field names a table not yet in data_model → ADD IT with inferred fields
+- If a UI module's `table` field names a table not yet in data_model → ADD IT with inferred fields
+- If a script references a table via GlideRecord → ADD IT if not already present
+
+When inferring fields for a table that has no sys_dictionary records in the XML:
+- Use every clue available: filter expressions, field names in scripts, choice list names, column references
+- For example, `filter: status=checked_out` implies a `status` field with at least `checked_out` as a choice value
+- Always include: `sys_id`, `created_on`, `created_by`, `updated_on`, `updated_by` as standard fields
+- Mark inferred fields with `notes: "inferred"` so downstream tools know
+
+---
+
+### CATALOG VARIABLE TYPE FILTER
+
+item_option_new records have a numeric `type` field. ONLY include variables with these types:
+
+| Type | Label        | Include? |
+|------|--------------|----------|
+| 1    | text         | YES      |
+| 2    | yes_no       | YES      |
+| 3    | multi_select | YES      |
+| 4    | numeric      | YES      |
+| 5    | checkbox     | YES      |
+| 6    | reference    | YES      |
+| 7    | datetime     | YES      |
+| 8    | date         | YES      |
+| 9    | time         | YES      |
+| 10   | select       | YES      |
+| 14   | label        | NO — layout only |
+| 16   | wide_text    | YES      |
+| 18   | lookup_select| YES      |
+| 20   | container_end| NO — layout only |
+| 21   | multi_line   | YES      |
+| 22   | masked       | YES      |
+| 23   | email        | YES      |
+| 24   | split        | NO — layout only |
+| 25   | container    | NO — layout only |
+| 26   | macro        | NO — layout only |
+| 27   | ui_page      | NO — layout only |
+| 28   | split_end    | NO — layout only |
+
+If a catalog item has ONLY layout-type variables after filtering, mark the item's variables list as empty
+and note: "variables: [] # all variables were layout containers — check for associated sc_cat_item records"
 
 ---
 
@@ -109,10 +175,13 @@ integrations:
 
 This should read like a clean, platform-neutral application model that could be rebuilt on another platform.
 
-Think:
-"Could an engineer rebuild this app from this output?"
+Ask yourself before returning:
+1. Does every table referenced in business_logic or ui have an entry in data_model?
+2. Does every entity have typed fields, not just field name strings?
+3. Does every catalog item have only real input variables (no layout containers)?
+4. Are choice fields populated with their actual option values?
 
-If not, improve the structure."""
+If any answer is NO, fix it before returning."""
 
 
 async def extract_sn_genome(
@@ -159,7 +228,16 @@ Module: {module}
 {xml_content}
 --- END XML ---
 
-Extract a complete application genome in YAML format. Be thorough — capture every entity, catalog item, workflow, business rule, UI module, and integration. Return ONLY the YAML."""
+Extract a complete application genome in YAML format.
+
+Requirements:
+- Capture every entity with TYPED fields (not just field name strings)
+- Include every table referenced in business rules or UI modules in data_model, even if not explicitly defined in the XML — infer fields from context
+- Filter catalog variables: exclude layout container types (20, 24, 25, 26, 27, 28) — only keep real input fields
+- Populate choice field values from question_choice and sys_choice records in the XML
+- Cross-check: every table in business_logic[].table and ui.modules[].table must appear in data_model
+
+Return ONLY the YAML."""
 
     try:
         raw_text, meta = await call_llm(
