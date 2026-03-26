@@ -669,18 +669,12 @@ async def seed_demo_data(app) -> None:
                 "Use actual field names from Section 3. Show entity relationships:\n"
                 "checkout records must reference equipment records by id.\n\n"
                 "---\n\n"
-                "## OUTPUT FORMAT\n"
-                "Return ONLY valid JSON matching this exact shape (no markdown fences):\n"
-                '{"plan":["≤5 short step labels"],"output":{"explanation":"1 sentence summary ONLY — keep this extremely short to save tokens for the files","filesystem_plan":{'
-                '"branch_name":"claude-build/{app_slug}",'
-                '"base_path":"<genome base path>",'
-                '"folders":["transformations"],'
-                '"files":[{"path":"transformations/CLAUDE.md","content":"<full CLAUDE.md>"},'
-                '{"path":"transformations/seed.json","content":"<seed JSON string>"}]'
-                '},"diff":"Files created: CLAUDE.md, seed.json","preview":"<first 200 chars of CLAUDE.md>"}}\n'
-                "\nCRITICAL: explanation MUST be ≤2 sentences. Do NOT write prose in explanation — "
-                "all detail goes inside transformations/CLAUDE.md. Wasting tokens on explanation "
-                "causes the response to be truncated before the files are complete.\n"
+                "## WHEN YOU HAVE ENOUGH CONTEXT\n"
+                "Signal readiness with this JSON shape (do NOT write file content here):\n"
+                '{"plan":["≤5 short step labels"],"ready":true,"files_to_produce":["transformations/CLAUDE.md","transformations/seed.json"]}\n\n'
+                "The system will then ask you to write each file separately.\n"
+                "You will receive a message like: 'Now write the complete content of transformations/CLAUDE.md'\n"
+                "At that point, output ONLY the raw file content — no JSON wrapper, no explanation.\n"
             ),
             "output_structure": {
                 "folders": ["transformations"],

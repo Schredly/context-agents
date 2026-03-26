@@ -56,23 +56,16 @@ Rules for required_files:
 - Request config/ and data/ files only if critical for the transformation
 - You will receive the file contents in the next turn
 
-### Shape 2 — Produce output (you have enough context)
+### Shape 2 — Signal ready (you have enough context, no more files needed)
 {
-  "plan": ["Summary of what was built and key decisions"],
-  "output": {
-    "explanation": "What was generated and why",
-    "filesystem_plan": {
-      "branch_name": "transform-{app_slug}",
-      "base_path": "the genome directory path",
-      "folders": ["transformations"],
-      "files": [
-        {"path": "transformations/filename.ext", "content": "full file content"}
-      ]
-    },
-    "diff": "Summary of what was created",
-    "preview": "Short preview of the primary output file"
-  }
+  "plan": ["≤5 short step labels"],
+  "ready": true,
+  "files_to_produce": ["transformations/CLAUDE.md", "transformations/seed.json"]
 }
+
+Use this shape when you have fetched enough files and are ready to write output.
+The system will then ask you to produce each file separately — you do NOT write
+file content in this response. Just declare what files you will produce.
 
 ## CRITICAL RULE — RETRIEVAL BEFORE BUILD
 
@@ -89,18 +82,18 @@ If you violate this rule your response WILL BE REJECTED and you must retry.
 ## RETRIEVAL STRATEGY
 
 Round 1: Analyze genome.index.json. Declare your plan and request the specific
-         structure files you need (forms, workflows, tables, ui). Do NOT produce
-         output yet — you have not read any files.
+         structure files you need (forms, workflows, tables, ui). Do NOT signal
+         ready yet — you have not read any files.
 Round 2: Based on what you read, fetch any remaining detail files required.
-Round 3+: Fetch targeted config or data files if necessary, then produce output.
+Round 3+: Fetch targeted config or data files if necessary, then signal ready.
 
-You have a maximum of 5 retrieval rounds before you MUST produce output.
+You have a maximum of 5 retrieval rounds before you MUST signal ready.
 
 ## RULES
 
 - NEVER request the full genome unless no index or structure files exist
 - Each plan[] entry MUST be ≤12 words — short labels, not prose explanations
-- Keep plan[] to 3–5 items maximum — brevity saves tokens for actual output
+- Keep plan[] to 3–5 items maximum
 - All new files MUST go under a 'transformations/' subfolder
 - Never overwrite original genome files (genome.yaml, graph.yaml, structure/*)
 - Return ONLY valid JSON — no markdown fences, no prose outside the JSON object
@@ -288,13 +281,13 @@ async def hydration_loop(
             "message": f"Round {round_num}: Asking LLM what it needs...",
         }}
 
-        # Force output on last round
+        # Force ready signal on last round
         if round_num == MAX_ROUNDS:
             messages.append({
                 "role": "user",
                 "content": (
-                    "This is your FINAL round. You MUST produce output now. "
-                    "Respond with {\"plan\": [...], \"output\": {\"filesystem_plan\": {...}, ...}}."
+                    "This is your FINAL round. You MUST signal ready now. "
+                    'Respond with {"plan": [...], "ready": true, "files_to_produce": ["transformations/CLAUDE.md", ...]}.'
                 ),
             })
 
@@ -458,30 +451,117 @@ async def hydration_loop(
             if total_context_chars > CONTEXT_BUDGET:
                 next_msg += (
                     f"\n\nCONTEXT BUDGET REACHED ({total_context_chars:,} chars). "
-                    "You MUST produce output now. Respond with "
-                    "{\"plan\": [...], \"output\": {\"filesystem_plan\": {...}, ...}}."
+                    'You MUST signal ready now. Respond with {"plan": [...], "ready": true, "files_to_produce": [...]}.'
                 )
 
             messages.append({"role": "user", "content": next_msg})
 
-        elif is_production:
-            # LLM is done — extract result from new "output" key or legacy top-level keys
-            output_block = parsed.get("output") or parsed
-            reasoning_list = (
-                plan if isinstance(plan, list) else
-                ([plan_str] if plan_str else []) or
-                (parsed.get("reasoning") if isinstance(parsed.get("reasoning"), list) else
-                 [parsed.get("reasoning", "")] if parsed.get("reasoning") else [])
-            )
+        # --- Shape 2: ready signal → synthesize files one by one ---
+        is_ready = parsed.get("ready") is True
+        # Also treat legacy output shape as ready (backward compat)
+        has_output = "output" in parsed or parsed.get("filesystem_plan") or parsed.get("explanation") or legacy_action == "produce_output"
 
+        if is_ready or (has_output and not is_retrieval):
+            files_to_produce: list[str] = parsed.get("files_to_produce", [])
+
+            # Legacy: extract files list from embedded filesystem_plan
+            if not files_to_produce and has_output:
+                output_block = parsed.get("output") or parsed
+                fp = output_block.get("filesystem_plan") or {}
+                files_to_produce = [f["path"] for f in fp.get("files", []) if isinstance(f, dict) and f.get("path")]
+
+            if not files_to_produce:
+                # Fallback: ask the LLM to declare what it will produce
+                files_to_produce = ["transformations/CLAUDE.md", "transformations/seed.json"]
+
+            reasoning_list = plan if isinstance(plan, list) else ([plan_str] if plan_str else [])
             yield {"type": "llm_reasoning", "data": {
-                "message": "; ".join(reasoning_list) if reasoning_list else "Producing output",
+                "message": "; ".join(reasoning_list) if reasoning_list else "Context loaded — synthesizing files",
                 "round": round_num,
             }}
+
+            # Add the ready signal to conversation history
+            messages.append({"role": "assistant", "content": raw_response})
+
+            # Synthesize each file with a separate focused call
+            produced_files: list[dict] = []
+            app_slug = base_path.rstrip("/").split("/")[-1]
+
+            for file_path in files_to_produce:
+                yield {"type": "phase", "data": {
+                    "phase": "synthesizing",
+                    "message": f"Writing {file_path}...",
+                }}
+
+                ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else "txt"
+                if ext in ("md", "txt", "py", "ts", "tsx", "js", "jsx", "yaml", "yml", "sh"):
+                    format_hint = f"Output raw {ext.upper()} — no JSON wrapper, no markdown fences, no explanation."
+                elif ext == "json":
+                    format_hint = "Output raw valid JSON only — no wrapper, no explanation, no markdown fences."
+                else:
+                    format_hint = "Output raw file content only."
+
+                synthesis_messages = messages + [{
+                    "role": "user",
+                    "content": (
+                        f"Now write the complete content of `{file_path}`.\n\n"
+                        f"{format_hint}\n\n"
+                        "Apply the full recipe/instructions from the system prompt. "
+                        "Use everything you have retrieved. Be thorough and complete."
+                    ),
+                }]
+
+                try:
+                    file_content, file_meta = await call_llm_multi_turn(
+                        provider=llm_cfg["provider"],
+                        api_key=llm_cfg["api_key"],
+                        model=llm_cfg["model"],
+                        messages=synthesis_messages,
+                        system_prompt=system,
+                        max_tokens=max(max_tokens, 32768),
+                    )
+                    total_input_tokens += file_meta.get("input_tokens") or 0
+                    total_output_tokens += file_meta.get("output_tokens") or 0
+
+                    # Strip stray fences from plain-text files
+                    if ext != "json":
+                        import re as _re
+                        file_content = _re.sub(r"^```[a-z]*\n?", "", file_content.strip())
+                        file_content = _re.sub(r"\n?```$", "", file_content.strip())
+
+                    produced_files.append({"path": file_path, "content": file_content})
+
+                    # Add to conversation so subsequent files have prior context
+                    messages = synthesis_messages + [{"role": "assistant", "content": file_content}]
+
+                    yield {"type": "file_fetched", "data": {
+                        "path": file_path,
+                        "size": len(file_content),
+                        "round": round_num,
+                    }}
+                except Exception as exc:
+                    logger.error("[hydration] File synthesis failed for %s: %s", file_path, exc)
+                    yield {"type": "phase", "data": {
+                        "phase": "synthesizing",
+                        "message": f"Warning: could not write {file_path}: {exc}",
+                    }}
+
+            if not produced_files:
+                yield {"type": "error", "data": {"message": "File synthesis produced no output."}}
+                return
+
+            filesystem_plan = {
+                "branch_name": f"transform-{app_slug}",
+                "base_path": base_path,
+                "folders": list({f["path"].split("/")[0] for f in produced_files if "/" in f["path"]}),
+                "files": produced_files,
+            }
+            preview = produced_files[0]["content"][:300] if produced_files else ""
 
             yield {"type": "hydration_complete", "data": {
                 "rounds": round_num,
                 "files_fetched": total_files_fetched,
+                "files_produced": len(produced_files),
                 "total_context_chars": total_context_chars,
                 "total_input_tokens": total_input_tokens,
                 "total_output_tokens": total_output_tokens,
@@ -489,14 +569,14 @@ async def hydration_loop(
 
             yield {"type": "result", "data": {
                 "reasoning": reasoning_list,
-                "explanation": output_block.get("explanation", ""),
-                "filesystem_plan": output_block.get("filesystem_plan"),
-                "diff": output_block.get("diff", ""),
-                "preview": output_block.get("preview", ""),
+                "explanation": f"Produced {len(produced_files)} file(s): {', '.join(f['path'] for f in produced_files)}",
+                "filesystem_plan": filesystem_plan,
+                "diff": f"Created: {', '.join(f['path'] for f in produced_files)}",
+                "preview": preview,
             }}
             return
 
-    # If we exhausted all rounds without produce_output
+    # If we exhausted all rounds without signalling ready
     yield {"type": "error", "data": {
         "message": f"Hydration loop exhausted after {MAX_ROUNDS} rounds without producing output.",
     }}
